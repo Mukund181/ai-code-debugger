@@ -1,0 +1,33 @@
+# Environment
+.env
+
+# ChromaDB (gets rebuilt on deploy)
+chroma_db/
+
+# Trained model (gets rebuilt on deploy)
+models/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# PyTorch
+*.pth
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.dockerignore
+Dockerfile

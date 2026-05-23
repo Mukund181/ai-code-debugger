@@ -1,0 +1,65 @@
+SYNTAX ERROR
+A SyntaxError means Python could not parse your code. It happens before the program runs.
+Common causes: missing colon after if/for/def/class, unmatched parentheses or brackets, invalid indentation, using a keyword as a variable name.
+Fix: Read the line number in the error. Look for missing colons, brackets, or wrong indentation. Example: "if x > 0" needs a colon → "if x > 0:".
+
+INDENTATION ERROR
+IndentationError means the indentation level is inconsistent. Python uses indentation to define blocks.
+Fix: Use 4 spaces consistently. Do not mix tabs and spaces. Every line inside an if/for/def block must be indented equally.
+
+NAME ERROR
+NameError means you used a variable or function name that has not been defined yet.
+Common causes: typo in variable name, using a variable before assigning it, forgetting to import a module.
+Fix: Check spelling of the variable. Make sure you assigned a value before using it. If it is a function from a library, add the import statement.
+
+TYPE ERROR
+TypeError means an operation was applied to the wrong type. Example: adding a string and an integer.
+Common causes: passing wrong argument types to a function, calling a non-callable object, forgetting to convert types.
+Fix: Use int(), str(), float() to convert types. Check what types your function expects. Print type(variable) to inspect.
+
+INDEX ERROR
+IndexError means you tried to access an element at an index that does not exist in a list or string.
+Common causes: off-by-one errors, using len(list) as index instead of len(list)-1, empty list access.
+Fix: Valid indexes are 0 to len(list)-1. Use range(len(list)) in loops. Check if the list is empty before accessing.
+
+KEY ERROR
+KeyError means you tried to access a dictionary key that does not exist.
+Fix: Use dict.get(key, default) instead of dict[key] to avoid crashes. Check if key is in dict before accessing.
+
+ATTRIBUTE ERROR
+AttributeError means you called a method or attribute that does not exist on that object.
+Common causes: calling a list method on a string, typo in method name, variable is None.
+Fix: Check the type of the variable with type(). Look up the correct method name in documentation. Check if variable is None before calling methods.
+
+VALUE ERROR
+ValueError means a function received an argument of the right type but an invalid value.
+Common causes: int("abc"), math.sqrt(-1), passing out-of-range values.
+Fix: Validate input before passing to functions. Use try/except to handle conversion errors.
+
+ZERO DIVISION ERROR
+ZeroDivisionError means you divided a number by zero.
+Fix: Add a check before division: if denominator != 0: result = numerator / denominator
+
+RUNTIME ERROR
+RuntimeError is a general error that occurs during execution. Often caused by recursion depth exceeded.
+Fix: Add a base case to recursive functions. Check sys.setrecursionlimit() if recursion depth is needed.
+
+LOGIC ERROR
+A logic error does not crash the program but produces wrong output. These are the hardest to find.
+Common causes: wrong operator (< instead of <=), wrong variable updated in loop, incorrect formula.
+Fix: Add print statements to trace variable values. Use a debugger. Test with simple known inputs first.
+
+IMPORT ERROR
+ImportError or ModuleNotFoundError means Python cannot find the module you are importing.
+Fix: Install the module with pip install module_name. Check spelling. Make sure you are in the right virtual environment.
+
+RECURSION ERROR
+RecursionError means the function called itself too many times without hitting a base case.
+Fix: Every recursive function needs a base case that stops the recursion. Check your termination condition.
+
+LIST COMPREHENSION
+List comprehensions are a concise way to create lists. Example: [x*2 for x in range(10) if x % 2 == 0]
+Common mistake: confusing the order — expression comes first, then for, then optional if.
+
+NONE TYPE ERROR
+TypeError: 'NoneType' object is not subscriptable means a variab
