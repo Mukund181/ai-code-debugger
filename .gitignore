@@ -27,7 +27,3 @@ env/
 # OS
 .DS_Store
 Thumbs.db
-
-# Docker
-.dockerignore
-Dockerfile
