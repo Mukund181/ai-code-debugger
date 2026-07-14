@@ -2,11 +2,13 @@ import os
 import chromadb
 from sentence_transformers import SentenceTransformer
 
-DOCS_DIR    = "data/docs"
-COLLECTION  = "debug_docs"
+current_dir  = os.path.dirname(os.path.abspath(__file__))
+root_dir     = os.path.dirname(current_dir)
+DOCS_DIR     = os.path.join(root_dir, "data", "docs")
+COLLECTION   = "debug_docs"
 
 def load_docs_to_chromadb():
-    client     = chromadb.PersistentClient(path="./chroma_db")
+    client     = chromadb.PersistentClient(path=os.path.join(root_dir, "chroma_db"))
     embedder   = SentenceTransformer("all-MiniLM-L6-v2")
 
     try:

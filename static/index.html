@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐛 AI Code Debugger Agent</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="glow-bg"></div>
+    
+    <header class="app-header">
+        <div class="header-logo">
+            <i data-lucide="bug" class="logo-icon"></i>
+            <div class="logo-text">
+                <h1>AI Code Debugger</h1>
+                <span class="subtext">Autonomous Self-Correcting Agent Platform</span>
+            </div>
+        </div>
+        
+        <div class="header-actions">
+            <div id="agent-status-badge" class="status-badge status-idle">
+                <span class="status-dot"></span>
+                <span class="status-text">Agent Idle</span>
+            </div>
+            
+            <button id="btn-reindex" class="secondary-btn" title="Reindex RAG database with data/docs">
+                <i data-lucide="database"></i> Reindex RAG
+            </button>
+            <button id="btn-retrain" class="secondary-btn" title="Retrain error classifier neural network">
+                <i data-lucide="cpu"></i> Retrain Model
+            </button>
+        </div>
+    </header>
+
+    <main class="main-container">
+        <!-- Left Panel: Input Workspace -->
+        <section class="workspace-panel card">
+            <div class="panel-header">
+                <i data-lucide="code-2"></i>
+                <h2>Code Workspace</h2>
+            </div>
+            
+            <div class="editor-container">
+                <label for="code-input" class="field-label">Buggy Python Code</label>
+                <div class="textarea-wrapper">
+                    <div class="line-numbers">
+                        <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span>
+                    </div>
+                    <textarea id="code-input" placeholder="def find_average(numbers):&#10;    total = sum(numbers)&#10;    # Buggy if numbers is empty!&#10;    return total / len(numbers)&#10;&#10;print(find_average([]))" spellcheck="false"></textarea>
+                </div>
+            </div>
+            
+            <div class="error-container">
+                <label for="error-input" class="field-label">Error Message / Stack Trace (Optional)</label>
+                <textarea id="error-input" placeholder="ZeroDivisionError: division by zero&#10;  File 'app.py', line 4, in find_average..."></textarea>
+            </div>
+            
+            <button id="btn-debug" class="primary-btn">
+                <i data-lucide="play"></i> Start Debugging Agent
+            </button>
+        </section>
+
+        <!-- Right Panel: Agent Dashboard & Diagnostics -->
+        <section class="dashboard-panel">
+            <!-- Timeline of Agent Reasoning -->
+            <div class="agent-timeline card">
+                <div class="panel-header">
+                    <i data-lucide="activity"></i>
+                    <h2>Agent Execution Log</h2>
+                </div>
+                
+                <div id="timeline-steps" class="timeline-steps">
+                    <!-- Placeholder steps before agent runs -->
+                    <div class="timeline-empty">
+                        <i data-lucide="info"></i>
+                        <p>Provide code and click "Start Debugging" to view the agent's dynamic reasoning steps, database lookups, and sandbox execution checks.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat & Diagnostics Display -->
+            <div class="chat-diagnostics card">
+                <div class="panel-header">
+                    <i data-lucide="message-square"></i>
+                    <h2>Diagnostic Chat & Solutions</h2>
+                    <button id="btn-clear-chat" class="icon-btn" title="Clear Chat History">
+                        <i data-lucide="trash-2"></i>
+                    </button>
+                </div>
+                
+                <div id="chat-messages" class="chat-messages">
+                    <div class="system-bubble message">
+                        <p>Hello! I am your AI Debugging Agent. Input code with issues on the left, and I will analyze the error type, fetch guide documentation, test fixes in my sandbox, and help you resolve it!</p>
+                    </div>
+                </div>
+                
+                <div class="chat-input-area">
+                    <input type="text" id="chat-user-input" placeholder="Ask follow-up questions about the code, fix, or logic..." disabled>
+                    <button id="btn-chat-send" class="send-btn" disabled>
+                        <i data-lucide="send"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="app-footer">
+        <p>Built with FastAPI · PyTorch · SentenceTransformers · ChromaDB · Groq</p>
+    </footer>
+
+    <script src="/static/app.js"></script>
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>

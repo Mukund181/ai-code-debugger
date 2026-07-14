@@ -8,7 +8,10 @@ _embedder   = None
 def _init():
     global _client, _collection, _embedder
     if _collection is None:
-        _client     = chromadb.PersistentClient(path="./chroma_db")
+        import os
+        current_dir  = os.path.dirname(os.path.abspath(__file__))
+        root_dir     = os.path.dirname(current_dir)
+        _client      = chromadb.PersistentClient(path=os.path.join(root_dir, "chroma_db"))
         _collection = _client.get_collection("debug_docs")
         _embedder   = SentenceTransformer("all-MiniLM-L6-v2")
 

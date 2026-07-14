@@ -8,9 +8,13 @@ _model    = None
 def _load():
     global _embedder, _model
     if _model is None:
+        import os
         _embedder = SentenceTransformer("all-MiniLM-L6-v2")
         _model    = ErrorClassifier()
-        _model.load_state_dict(torch.load("models/error_classifier.pth", map_location="cpu"))
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir    = os.path.dirname(current_dir)
+        model_path  = os.path.join(root_dir, "models", "error_classifier.pth")
+        _model.load_state_dict(torch.load(model_path, map_location="cpu"))
         _model.eval()
 
 def classify_error(error_text: str) -> str:
