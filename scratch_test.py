@@ -69,7 +69,67 @@ def test_generation_agent():
         print(f"ERROR: Generation Agent test failed: {str(e)}", file=sys.stderr)
 
 
+def test_repo_analyzer():
+    print("TESTING LOCAL GRAPH RAG DEPENDENCY MAPPER")    
+    import tempfile
+    import shutil
+    from repo_analyzer.graph_rag import CodeGraph
+    
+    temp_dir = tempfile.mkdtemp()
+    try:
+        # Create helper module
+        helper_code = """
+def add_values(x, y):
+    return x + y
+
+def multiply_values(x, y):
+    return x * y
+"""
+        with open(os.path.join(temp_dir, "math_helper.py"), "w", encoding="utf-8") as f:
+            f.write(helper_code)
+            
+        # Create main application calling helper
+        app_code = """
+from math_helper import add_values
+
+def execute_logic():
+    val = add_values(10, 20)
+    print("Result:", val)
+    return val
+
+if __name__ == "__main__":
+    execute_logic()
+"""
+        with open(os.path.join(temp_dir, "main_app.py"), "w", encoding="utf-8") as f:
+            f.write(app_code)
+            
+        graph = CodeGraph()
+        print("Parsing dummy workspace directory...")
+        graph.build_from_directory(temp_dir)
+        
+        print(f"Graph nodes parsed: {list(graph.nodes.keys())}")
+        print(f"Graph edges mapped: {graph.edges}")
+        
+        # Query impact of math_helper.py change
+        print("\nQuerying impact chain of 'math_helper.py' changes...")
+        impact = graph.query_impact("math_helper.py")
+        
+        print("Root file:", impact["root_file"])
+        print("Root nodes:", impact["root_nodes"])
+        print("Impact chain:")
+        for idx, item in enumerate(impact["impact_chain"]):
+            print(f"  {idx+1}: {item['type']} '{item['name']}' in file '{item['file']}' (Depth: {item['depth']})")
+            
+        assert len(impact["impact_chain"]) > 0, "Dependency mapping failed to detect any connections!"
+        print("\nGraph RAG tests successful!")
+    except Exception as e:
+        print(f"ERROR: Graph RAG testing failed: {str(e)}", file=sys.stderr)
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 if __name__ == "__main__":
     load_dotenv()
     test_debug_agent()
     test_generation_agent()
+    test_repo_analyzer()

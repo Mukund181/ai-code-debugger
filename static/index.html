@@ -31,20 +31,13 @@
             <button id="tab-generator" class="nav-tab">
                 <i data-lucide="brain-circuit"></i> Generator & Learn
             </button>
+            <button id="tab-analyzer" class="nav-tab">
+                <i data-lucide="git-branch"></i> GitHub Analyzer
+            </button>
         </nav>
         
         <div class="header-actions">
-            <div id="agent-status-badge" class="status-badge status-idle">
-                <span class="status-dot"></span>
-                <span class="status-text">Agent Idle</span>
-            </div>
-            
-            <button id="btn-reindex" class="secondary-btn" title="Reindex RAG database with data/docs">
-                <i data-lucide="database"></i> Reindex RAG
-            </button>
-            <button id="btn-retrain" class="secondary-btn" title="Retrain error classifier neural network">
-                <i data-lucide="cpu"></i> Retrain Model
-            </button>
+            <!-- Simplified header without developer operations -->
         </div>
     </header>
 
@@ -56,7 +49,7 @@
             <section class="workspace-panel card">
                 <div class="panel-header">
                     <i data-lucide="code-2"></i>
-                    <h2>Debugger Workspace</h2>
+                    <h2>Debugger Input</h2>
                 </div>
                 
                 <div class="editor-container">
@@ -79,45 +72,27 @@
                 </button>
             </section>
 
-            <!-- Right Column: Outputs -->
-            <section class="dashboard-panel">
-                <!-- Timeline of Agent Reasoning -->
-                <div class="agent-timeline card">
-                    <div class="panel-header">
-                        <i data-lucide="activity"></i>
-                        <h2>Agent Debugging Log</h2>
-                    </div>
-                    
-                    <div id="timeline-steps" class="timeline-steps">
-                        <div class="timeline-empty">
-                            <i data-lucide="info"></i>
-                            <p>Provide code and click "Start Debugging" to view the agent's dynamic reasoning steps, database lookups, and sandbox execution checks.</p>
-                        </div>
+            <!-- Right Column: Chat & Diagnostics Display -->
+            <section class="chat-diagnostics card">
+                <div class="panel-header">
+                    <i data-lucide="message-square"></i>
+                    <h2>Diagnostic Chat & Solutions</h2>
+                    <button id="btn-clear-chat" class="icon-btn" title="Clear Chat History">
+                        <i data-lucide="trash-2"></i>
+                    </button>
+                </div>
+                
+                <div id="chat-messages" class="chat-messages">
+                    <div class="system-bubble message">
+                        <p>Hello! I am your AI Debugging Agent. Input code with issues on the left, and I will analyze the error type, fetch reference guides, test fixes, and help you resolve it!</p>
                     </div>
                 </div>
-
-                <!-- Chat & Diagnostics Display -->
-                <div class="chat-diagnostics card">
-                    <div class="panel-header">
-                        <i data-lucide="message-square"></i>
-                        <h2>Diagnostic Chat & Solutions</h2>
-                        <button id="btn-clear-chat" class="icon-btn" title="Clear Chat History">
-                            <i data-lucide="trash-2"></i>
-                        </button>
-                    </div>
-                    
-                    <div id="chat-messages" class="chat-messages">
-                        <div class="system-bubble message">
-                            <p>Hello! I am your AI Debugging Agent. Input code with issues on the left, and I will analyze the error type, fetch guide documentation, test fixes in my sandbox, and help you resolve it!</p>
-                        </div>
-                    </div>
-                    
-                    <div class="chat-input-area">
-                        <input type="text" id="chat-user-input" placeholder="Ask follow-up questions about the code, fix, or logic..." disabled>
-                        <button id="btn-chat-send" class="send-btn" disabled>
-                            <i data-lucide="send"></i>
-                        </button>
-                    </div>
+                
+                <div class="chat-input-area">
+                    <input type="text" id="chat-user-input" placeholder="Ask follow-up questions about the code, fix, or logic..." disabled>
+                    <button id="btn-chat-send" class="send-btn" disabled>
+                        <i data-lucide="send"></i>
+                    </button>
                 </div>
             </section>
         </div>
@@ -128,7 +103,7 @@
             <section class="workspace-panel card">
                 <div class="panel-header">
                     <i data-lucide="file-plus-2"></i>
-                    <h2>Generation Prompt</h2>
+                    <h2>Code Prompt</h2>
                 </div>
 
                 <div class="input-group">
@@ -151,37 +126,75 @@
                 </button>
             </section>
 
-            <!-- Right Column: Outputs -->
-            <section class="dashboard-panel">
-                <!-- Timeline of Agent Reasoning -->
-                <div class="agent-timeline card">
-                    <div class="panel-header">
-                        <i data-lucide="activity"></i>
-                        <h2>Agent Generation Log</h2>
+            <!-- Right Column: Learning Tutorial Output -->
+            <section class="chat-diagnostics card">
+                <div class="panel-header">
+                    <i data-lucide="book-open"></i>
+                    <h2>Educational Guide & Code</h2>
+                    <button id="btn-clear-gen" class="icon-btn" title="Clear Result">
+                        <i data-lucide="rotate-ccw"></i>
+                    </button>
+                </div>
+                
+                <div id="gen-output-messages" class="chat-messages">
+                    <div class="system-bubble message">
+                        <p>Your generated code, detailed explanations, algorithmic time complexity analyses, and background computer science tutorials will render here once generation completes.</p>
                     </div>
-                    
-                    <div id="gen-timeline-steps" class="timeline-steps">
-                        <div class="timeline-empty">
-                            <i data-lucide="info"></i>
-                            <p>Enter a description and click "Generate Code" to see the agent query the concept database, draft the code, and compile-check it in the sandbox.</p>
-                        </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Tab 3: GitHub Analyzer Workspace -->
+        <div id="analyzer-container" class="workspace-grid">
+            <!-- Left Column: Inputs & File Tree -->
+            <section class="workspace-panel card">
+                <div class="panel-header">
+                    <i data-lucide="git-branch"></i>
+                    <h2>GitHub Repository</h2>
+                </div>
+
+                <div class="input-group">
+                    <label for="repo-url-input" class="field-label">GitHub Repository URL</label>
+                    <div class="input-with-button">
+                        <input type="text" id="repo-url-input" placeholder="e.g. https://github.com/Mukund181/ai-code-debugger" class="text-field-inner">
+                        <button id="btn-analyze-repo" class="inline-btn">Analyze</button>
                     </div>
                 </div>
 
-                <!-- Learning Tutorial Output -->
-                <div class="chat-diagnostics card">
-                    <div class="panel-header">
-                        <i data-lucide="book-open"></i>
-                        <h2>Educational Guide & Code</h2>
-                        <button id="btn-clear-gen" class="icon-btn" title="Clear Result">
-                            <i data-lucide="rotate-ccw"></i>
-                        </button>
+                <div class="repo-meta-summary" id="repo-meta-summary" style="display: none;">
+                    <!-- Mapped statistics render here -->
+                </div>
+
+                <div class="explorer-group" style="margin-top: 1.5rem;">
+                    <label class="field-label">Select File to Edit</label>
+                    <div class="file-explorer-list" id="repo-file-list">
+                        <div class="empty-explorer">Analyze a repository first to load its files.</div>
                     </div>
-                    
-                    <div id="gen-output-messages" class="chat-messages">
-                        <div class="system-bubble message">
-                            <p>Your generated code, detailed explanations, algorithmic time complexity analyses, and background computer science tutorials will render here once generation completes.</p>
-                        </div>
+                </div>
+
+                <div class="editor-container" style="margin-top: 1.25rem;">
+                    <label for="analyzer-change-input" class="field-label">Proposed Code Changes</label>
+                    <textarea id="analyzer-change-input" class="large-textarea" style="height: 150px;" placeholder="Paste your proposed update snippet for the selected file..."></textarea>
+                </div>
+
+                <button id="btn-check-impact" class="primary-btn" style="margin-top: 1.5rem;" disabled>
+                    <i data-lucide="shield-alert"></i> Check Code Impact
+                </button>
+            </section>
+
+            <!-- Right Column: Impact Report -->
+            <section class="chat-diagnostics card">
+                <div class="panel-header">
+                    <i data-lucide="bar-chart-2"></i>
+                    <h2>Downstream Impact Report</h2>
+                    <button id="btn-clear-analyzer" class="icon-btn" title="Clear Result">
+                        <i data-lucide="rotate-ccw"></i>
+                    </button>
+                </div>
+
+                <div id="analyzer-output-messages" class="chat-messages">
+                    <div class="system-bubble message">
+                        <p>Analyze a repository and specify modifications on the left. The Graph RAG will search for caller paths and generate a conflict/breakage analysis here.</p>
                     </div>
                 </div>
             </section>

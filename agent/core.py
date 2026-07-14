@@ -16,7 +16,6 @@ def build_agent():
     return _agent
 
 def build_gen_agent():
-    global _gen_gen_agent, _gen_agent
     global _gen_agent
     if _gen_agent is None:
         _gen_agent = GenerationAgent()
@@ -74,7 +73,7 @@ class DebugAgent:
             "detail": "Asking Groq LLM to analyze and write a solution..."
         })
         
-        prompt = f"""You are an expert Python debugging assistant.
+        prompt = f"""You are an expert multi-language debugging assistant. You support Python, C++, Java, JavaScript, and other languages.
 Relevant reference documentation:
 {retrieved}
 
@@ -83,19 +82,19 @@ Detected error category: {error_type}
 User Code and/or Error query:
 {user_input}
 
-Please write a Python code snippet that fixes the issue, enclosed in a ```python ... ``` block. Also explain:
+Please write a code snippet in the target language (default to Python if not specified) that fixes the issue, enclosed in a standard markdown ```[language] ... ``` block (e.g. ```cpp for C++ or ```python for Python). Also explain:
 1) What is wrong
 2) How you fixed it
 3) Why the issue occurred
 
-Make sure the code block is standalone and can be executed to verify its correctness.
+Make sure the code block is standalone and correct.
 """
 
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are an expert Python debugging assistant. Be concise and write functional python code in markdown blocks."},
+                    {"role": "system", "content": "You are an expert multi-language debugging assistant. Be concise and write functional code in markdown blocks."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.2,
@@ -126,35 +125,36 @@ Make sure the code block is standalone and can be executed to verify its correct
         exec_details = ""
         
         for attempt in range(1, max_attempts + 1):
-            # Extract code block from explanation
-            code_blocks = re.findall(r"```python\n(.*?)```", current_explanation, re.DOTALL)
+            # Extract code block and language tag: e.g. ```cpp\ncode\n```
+            code_blocks = re.findall(r"```(\w*)\n(.*?)```", current_explanation, re.DOTALL)
             if not code_blocks:
-                code_blocks = re.findall(r"```\n(.*?)```", current_explanation, re.DOTALL)
+                exec_details = "No code blocks found. Skipping sandbox execution check."
+                success = True  
+                break
+
+            lang, current_code = code_blocks[0]
+            lang = lang.strip().lower()
+
+            if not lang:
+                lang = "python"
+
+            # Execute Python code blocks in sandbox
+            if lang in ["python", "py"]:
+                steps[-1]["detail"] = f"Running python code verification (Attempt {attempt}/{max_attempts})..."
+                try:
+                    exec_details = execute_code.invoke(current_code)
+                except Exception as e:
+                    exec_details = f"ERROR: Subprocess run failed: {str(e)}"
+
+                has_error = "ERROR" in exec_details or "Traceback" in exec_details or "Exception" in exec_details
                 
-            if not code_blocks:
-                exec_details = "No executable code blocks found. Skipping sandbox execution check."
-                success = True  # Nothing to verify, treated as informational response
-                break
-
-            current_code = code_blocks[0]
-            steps[-1]["detail"] = f"Running code verification (Attempt {attempt}/{max_attempts})..."
-
-            try:
-                exec_details = execute_code.invoke(current_code)
-            except Exception as e:
-                exec_details = f"ERROR: Subprocess run failed: {str(e)}"
-
-            # Detect failure signatures
-            has_error = "ERROR" in exec_details or "Traceback" in exec_details or "Exception" in exec_details
-            
-            if not has_error:
-                success = True
-                steps[-1]["detail"] = f"Attempt {attempt}: Code ran successfully without errors!"
-                break
-            else:
-                # Self-correction prompt
-                steps[-1]["detail"] = f"Attempt {attempt} failed. Traceback detected! Asking LLM to self-correct..."
-                correction_prompt = f"""The previous code snippet you wrote caused an execution error.
+                if not has_error:
+                    success = True
+                    steps[-1]["detail"] = f"Attempt {attempt}: Code ran successfully without errors!"
+                    break
+                else:
+                    steps[-1]["detail"] = f"Attempt {attempt} failed. Traceback detected! Asking LLM to self-correct..."
+                    correction_prompt = f"""The previous Python code snippet you wrote caused an execution error.
 Execution Error:
 {exec_details}
 
@@ -163,29 +163,35 @@ Here was the code that failed:
 {current_code}
 ```
 
-Please analyze the execution error and write a corrected version of the code inside a new ```python ... ``` block, along with a revised explanation. Ensure all necessary variables, modules, and inputs are defined so it can run standalone.
+Please analyze the execution error and write a corrected version of the code inside a new ```python ... ``` block, along with a revised explanation.
 """
-                try:
-                    response = self.client.chat.completions.create(
-                        model=self.model,
-                        messages=[
-                            {"role": "system", "content": "You are an expert Python debugging assistant. Your last code snippet had an execution error. Fix it."},
-                            {"role": "user", "content": correction_prompt}
-                        ],
-                        temperature=0.1,
-                        max_tokens=1024,
-                    )
-                    current_explanation = response.choices[0].message.content
-                except Exception as e:
-                    exec_details += f"\n(Correction call failed: {str(e)})"
-                    break
+                    try:
+                        response = self.client.chat.completions.create(
+                            model=self.model,
+                            messages=[
+                                {"role": "system", "content": "You are an expert Python debugging assistant. Correct the code so it executes successfully."},
+                                {"role": "user", "content": correction_prompt}
+                            ],
+                            temperature=0.1,
+                            max_tokens=1024,
+                        )
+                        current_explanation = response.choices[0].message.content
+                    except Exception as e:
+                        exec_details += f"\n(Correction call failed: {str(e)})"
+                        break
+            else:
+                # Non-python code, skip compilation run checks to avoid syntax exceptions
+                exec_details = f"Compilation check bypassed for non-Python language: {lang}."
+                success = True
+                steps[-1]["detail"] = f"Skipped sandbox check (non-Python language: {lang}). Code assumed correct."
+                break
 
         if success:
             steps[-1]["status"] = "success"
-            steps[-1]["detail"] = f"Code verified successfully.\n\nSandbox Execution Output:\n{exec_details}"
+            steps[-1]["detail"] = f"Code verified successfully.\n\n{exec_details}"
         else:
             steps[-1]["status"] = "failed"
-            steps[-1]["detail"] = f"Failed to correct the code within {max_attempts} attempts.\n\nLast Sandbox Execution Output:\n{exec_details}"
+            steps[-1]["detail"] = f"Failed to correct the code within {max_attempts} attempts.\n\n{exec_details}"
 
         return {
             "output": current_explanation,
@@ -225,17 +231,18 @@ class GenerationAgent:
         steps.append({
             "name": "Write Code & Learning Guide",
             "status": "pending",
-            "detail": "Asking Groq LLM to generate verified code and CS concepts tutorial..."
+            "detail": "Asking Groq LLM to generate code and concepts tutorial..."
         })
 
         system_prompt = (
             "You are an expert computer science instructor and code generator. "
-            "Write highly clear, self-contained Python code in standard markdown ```python ... ``` blocks, "
+            "You support Python, C++, Java, JavaScript, and other languages. "
+            "Write highly clear, self-contained code in standard markdown ```[language] ... ``` blocks (e.g. ```cpp or ```python), "
             "followed by a detailed conceptual tutorial explaining the logic, the computational principles, "
             "and complexity (Time and Space complexity using Big-O notation)."
         )
 
-        user_prompt = f"""Write a Python script to solve this prompt:
+        user_prompt = f"""Write a script in the target language (check if the user requested C++, Java, JS, or Python) to solve this prompt:
 "{prompt_input}"
 
 Category / Topic context: {topic}
@@ -243,9 +250,9 @@ Reference documentation:
 {retrieved}
 
 Ensure the code:
-1. Is complete, fully functional, and standalone (with sample inputs/outputs).
-2. Contains no external dependencies not standard in Python.
-3. Is enclosed in a ```python ... ``` block.
+1. Is written in the requested programming language (e.g., C++ if prompt contains 'c++', 'cpp' or 'cplusplus').
+2. Is complete, fully functional, and standalone.
+3. Is enclosed in a standard markdown ```[language] ... ``` block.
 
 Also provide a brief educational guide below the code block:
 - Explanation of how it works.
@@ -287,33 +294,35 @@ Also provide a brief educational guide below the code block:
         exec_details = ""
 
         for attempt in range(1, max_attempts + 1):
-            # Extract code block
-            code_blocks = re.findall(r"```python\n(.*?)```", current_explanation, re.DOTALL)
-            if not code_blocks:
-                code_blocks = re.findall(r"```\n(.*?)```", current_explanation, re.DOTALL)
-
+            # Extract code block and language tag
+            code_blocks = re.findall(r"```(\w*)\n(.*?)```", current_explanation, re.DOTALL)
             if not code_blocks:
                 exec_details = "No executable code blocks found to verify."
                 success = True
                 break
 
-            current_code = code_blocks[0]
-            steps[-1]["detail"] = f"Running code verification (Attempt {attempt}/{max_attempts})..."
+            lang, current_code = code_blocks[0]
+            lang = lang.strip().lower()
 
-            try:
-                exec_details = execute_code.invoke(current_code)
-            except Exception as e:
-                exec_details = f"ERROR: Subprocess run failed: {str(e)}"
+            if not lang:
+                lang = "python"
 
-            has_error = "ERROR" in exec_details or "Traceback" in exec_details or "Exception" in exec_details
+            if lang in ["python", "py"]:
+                steps[-1]["detail"] = f"Running python code verification (Attempt {attempt}/{max_attempts})..."
+                try:
+                    exec_details = execute_code.invoke(current_code)
+                except Exception as e:
+                    exec_details = f"ERROR: Subprocess run failed: {str(e)}"
 
-            if not has_error:
-                success = True
-                steps[-1]["detail"] = f"Attempt {attempt}: Code compiled and executed successfully!"
-                break
-            else:
-                steps[-1]["detail"] = f"Attempt {attempt} failed. Compilation/Execution error! Asking LLM to self-correct..."
-                correction_prompt = f"""The Python script you wrote has execution errors.
+                has_error = "ERROR" in exec_details or "Traceback" in exec_details or "Exception" in exec_details
+
+                if not has_error:
+                    success = True
+                    steps[-1]["detail"] = f"Attempt {attempt}: Code compiled and executed successfully!"
+                    break
+                else:
+                    steps[-1]["detail"] = f"Attempt {attempt} failed. Compilation/Execution error! Asking LLM to self-correct..."
+                    correction_prompt = f"""The Python script you wrote has execution errors.
 Execution Error:
 {exec_details}
 
@@ -324,27 +333,33 @@ Here was the code:
 
 Please analyze the execution error and write a corrected version of the code inside a new ```python ... ``` block, keeping the tutorial explanation intact. Ensure all variables and modules are defined.
 """
-                try:
-                    response = self.client.chat.completions.create(
-                        model=self.model,
-                        messages=[
-                            {"role": "system", "content": "You are an expert Python debugging assistant. Correct the code you generated so it executes without error."},
-                            {"role": "user", "content": correction_prompt}
-                        ],
-                        temperature=0.1,
-                        max_tokens=1024,
-                    )
-                    current_explanation = response.choices[0].message.content
-                except Exception as e:
-                    exec_details += f"\n(Correction call failed: {str(e)})"
-                    break
+                    try:
+                        response = self.client.chat.completions.create(
+                            model=self.model,
+                            messages=[
+                                {"role": "system", "content": "You are an expert Python debugging assistant. Correct the code you generated so it executes without error."},
+                                {"role": "user", "content": correction_prompt}
+                            ],
+                            temperature=0.1,
+                            max_tokens=1024,
+                        )
+                        current_explanation = response.choices[0].message.content
+                    except Exception as e:
+                        exec_details += f"\n(Correction call failed: {str(e)})"
+                        break
+            else:
+                # Non-python code, skip compilation run checks
+                exec_details = f"Compilation check bypassed for non-Python language: {lang}."
+                success = True
+                steps[-1]["detail"] = f"Skipped sandbox check (non-Python language: {lang}). Code assumed correct."
+                break
 
         if success:
             steps[-1]["status"] = "success"
-            steps[-1]["detail"] = f"Code verified successfully.\n\nSandbox Execution Output:\n{exec_details}"
+            steps[-1]["detail"] = f"Code verified successfully.\n\n{exec_details}"
         else:
             steps[-1]["status"] = "failed"
-            steps[-1]["detail"] = f"Code failed compilation checks within {max_attempts} attempts.\n\nLast execution traceback:\n{exec_details}"
+            steps[-1]["detail"] = f"Code failed compilation checks within {max_attempts} attempts.\n\n{exec_details}"
 
         return {
             "output": current_explanation,

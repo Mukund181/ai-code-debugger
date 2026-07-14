@@ -2,12 +2,13 @@ document.addEventListener("DOMContentLoaded", () => {
     // Nav Tabs Elements
     const tabDebugger = document.getElementById("tab-debugger");
     const tabGenerator = document.getElementById("tab-generator");
+    const tabAnalyzer = document.getElementById("tab-analyzer");
+    
     const debuggerContainer = document.getElementById("debugger-container");
     const generatorContainer = document.getElementById("generator-container");
+    const analyzerContainer = document.getElementById("analyzer-container");
 
     // Common DOM Elements
-    const btnReindex = document.getElementById("btn-reindex");
-    const btnRetrain = document.getElementById("btn-retrain");
     const agentStatusBadge = document.getElementById("agent-status-badge");
 
     // Tab 1: Debugger Workspace DOM Elements
@@ -15,7 +16,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const dbgCodeInput = document.getElementById("code-input");
     const dbgErrorInput = document.getElementById("error-input");
     const dbgBtnDebug = document.getElementById("btn-debug");
-    const dbgTimelineSteps = document.getElementById("timeline-steps");
     const dbgChatMessages = document.getElementById("chat-messages");
     const dbgChatUserInput = document.getElementById("chat-user-input");
     const dbgBtnChatSend = document.getElementById("btn-chat-send");
@@ -25,30 +25,47 @@ document.addEventListener("DOMContentLoaded", () => {
     const genTopic = document.getElementById("gen-topic");
     const genPromptInput = document.getElementById("gen-prompt-input");
     const genBtnGenerate = document.getElementById("btn-generate");
-    const genTimelineSteps = document.getElementById("gen-timeline-steps");
     const genOutputMessages = document.getElementById("gen-output-messages");
     const genBtnClear = document.getElementById("btn-clear-gen");
 
-    let chatHistory = [];
+    // Tab 3: GitHub Analyzer DOM Elements
+    const repoUrlInput = document.getElementById("repo-url-input");
+    const btnAnalyzeRepo = document.getElementById("btn-analyze-repo");
+    const repoMetaSummary = document.getElementById("repo-meta-summary");
+    const repoFileList = document.getElementById("repo-file-list");
+    const analyzerChangeInput = document.getElementById("analyzer-change-input");
+    const btnCheckImpact = document.getElementById("btn-check-impact");
+    const analyzerOutputMessages = document.getElementById("analyzer-output-messages");
+    const btnClearAnalyzer = document.getElementById("btn-clear-analyzer");
 
-    // --- TAB SWITCHING WORKFLOW ---
+    let chatHistory = [];
+    let selectedFilePath = "";
+
+    // --- TAB SWITCHING ---
     function switchTab(tabId) {
+        tabDebugger.classList.remove("active");
+        tabGenerator.classList.remove("active");
+        tabAnalyzer.classList.remove("active");
+        debuggerContainer.classList.remove("active");
+        generatorContainer.classList.remove("active");
+        analyzerContainer.classList.remove("active");
+
         if (tabId === "debugger") {
             tabDebugger.classList.add("active");
-            tabGenerator.classList.remove("active");
             debuggerContainer.classList.add("active");
-            generatorContainer.classList.remove("active");
-        } else {
-            tabDebugger.classList.remove("active");
+        } else if (tabId === "generator") {
             tabGenerator.classList.add("active");
-            debuggerContainer.classList.remove("active");
             generatorContainer.classList.add("active");
+        } else if (tabId === "analyzer") {
+            tabAnalyzer.classList.add("active");
+            analyzerContainer.classList.add("active");
         }
         lucide.createIcons();
     }
 
     tabDebugger.addEventListener("click", () => switchTab("debugger"));
     tabGenerator.addEventListener("click", () => switchTab("generator"));
+    tabAnalyzer.addEventListener("click", () => switchTab("analyzer"));
 
     // --- LINE NUMBER GENERATOR ---
     function updateLineNumbers() {
@@ -68,15 +85,17 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!text) return "";
         let html = text;
 
-        // Escape standard HTML characters for XSS prevention
+        // Escape HTML tags to prevent raw execution
         html = html
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;");
 
-        // Code blocks with syntax
+        // Code blocks with syntax highlighting
         html = html.replace(/```python\n([\s\S]*?)```/g, '<pre><code class="language-python">$1</code></pre>');
         html = html.replace(/```python([\s\S]*?)```/g, '<pre><code class="language-python">$1</code></pre>');
+        html = html.replace(/```cpp\n([\s\S]*?)```/g, '<pre><code class="language-cpp">$1</code></pre>');
+        html = html.replace(/```cpp([\s\S]*?)```/g, '<pre><code class="language-cpp">$1</code></pre>');
         html = html.replace(/```\n([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
         html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
 
@@ -96,101 +115,59 @@ document.addEventListener("DOMContentLoaded", () => {
         html = html.replace(/^\s*[-*]\s+(.*?)$/gm, '<li>$1</li>');
         html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
 
-        // Newlines
+        // Double line breaks
         html = html.replace(/\n\n/g, '<p></p>');
         html = html.replace(/\n/g, '<br>');
 
         return html;
     }
 
-    // Set Status Badge
-    function setAgentStatus(status, text) {
-        agentStatusBadge.className = `status-badge status-${status}`;
-        agentStatusBadge.querySelector(".status-text").textContent = text;
-    }
-
-    // Toggle Loading States
+    // Toggle Button Loading States
     function setWorkingState(isWorking, agentType = "debugger") {
         if (isWorking) {
-            setAgentStatus("pending", "Agent Running...");
             if (agentType === "debugger") {
                 dbgBtnDebug.disabled = true;
-                dbgBtnDebug.innerHTML = `<i data-lucide="loader" class="spinning"></i> Working...`;
+                dbgBtnDebug.innerHTML = `<i data-lucide="loader" class="spinning"></i> Debugging...`;
                 dbgChatUserInput.disabled = true;
                 dbgBtnChatSend.disabled = true;
-            } else {
+            } else if (agentType === "generator") {
                 genBtnGenerate.disabled = true;
-                genBtnGenerate.innerHTML = `<i data-lucide="loader" class="spinning"></i> Working...`;
+                genBtnGenerate.innerHTML = `<i data-lucide="loader" class="spinning"></i> Generating...`;
+            } else if (agentType === "analyzer-repo") {
+                btnAnalyzeRepo.disabled = true;
+                btnAnalyzeRepo.innerHTML = `<i data-lucide="loader" class="spinning"></i> Analyzing...`;
+            } else if (agentType === "analyzer-impact") {
+                btnCheckImpact.disabled = true;
+                btnCheckImpact.innerHTML = `<i data-lucide="loader" class="spinning"></i> Checking...`;
             }
         } else {
-            setAgentStatus("idle", "Agent Idle");
             if (agentType === "debugger") {
                 dbgBtnDebug.disabled = false;
                 dbgBtnDebug.innerHTML = `<i data-lucide="play"></i> Start Debugging Agent`;
                 dbgChatUserInput.disabled = false;
                 dbgBtnChatSend.disabled = false;
-            } else {
+            } else if (agentType === "generator") {
                 genBtnGenerate.disabled = false;
                 genBtnGenerate.innerHTML = `<i data-lucide="sparkles"></i> Generate Code & Learn`;
+            } else if (agentType === "analyzer-repo") {
+                btnAnalyzeRepo.disabled = false;
+                btnAnalyzeRepo.innerHTML = `Analyze`;
+            } else if (agentType === "analyzer-impact") {
+                btnCheckImpact.disabled = false;
+                btnCheckImpact.innerHTML = `<i data-lucide="shield-alert"></i> Check Code Impact`;
             }
         }
         lucide.createIcons();
     }
 
-    // --- TIMELINE STEP RENDERING ENGINE ---
-    function renderTimeline(steps, containerElement) {
-        containerElement.innerHTML = "";
-        if (!steps || steps.length === 0) {
-            containerElement.innerHTML = `
-                <div class="timeline-empty">
-                    <i data-lucide="info"></i>
-                    <p>No activity logged yet.</p>
-                </div>`;
-            lucide.createIcons();
-            return;
-        }
-
-        steps.forEach((step) => {
-            const stepDiv = document.createElement("div");
-            stepDiv.className = `timeline-step step-state-${step.status}`;
-
-            let iconName = "circle";
-            if (step.status === "pending") iconName = "loader";
-            if (step.status === "success") iconName = "check-circle-2";
-            if (step.status === "failed") iconName = "x-circle";
-
-            const isSpinner = step.status === "pending" ? "spinning" : "";
-
-            stepDiv.innerHTML = `
-                <div class="step-header">
-                    <div class="step-header-left">
-                        <span class="step-icon"><i data-lucide="${iconName}" class="${isSpinner}"></i></span>
-                        <span class="step-title">${step.name}</span>
-                    </div>
-                    <span class="step-arrow"><i data-lucide="chevron-down"></i></span>
-                </div>
-                <div class="step-details" style="display: none;">${step.detail}</div>
-            `;
-
-            const header = stepDiv.querySelector(".step-header");
-            const details = stepDiv.querySelector(".step-details");
-            const arrow = stepDiv.querySelector(".step-arrow");
-
-            header.addEventListener("click", () => {
-                const isOpen = details.style.display !== "none";
-                details.style.display = isOpen ? "none" : "block";
-                arrow.style.transform = isOpen ? "rotate(0deg)" : "rotate(180deg)";
-            });
-
-            if (step.status === "pending" || step.status === "failed") {
-                details.style.display = "block";
-                arrow.style.transform = "rotate(180deg)";
-            }
-
-            containerElement.appendChild(stepDiv);
-        });
-
-        lucide.createIcons();
+    // Append Message to Chat Panel
+    function appendDebugMessage(role, text) {
+        const bubble = document.createElement("div");
+        bubble.className = `${role}-bubble message`;
+        bubble.innerHTML = parseMarkdown(text);
+        dbgChatMessages.appendChild(bubble);
+        dbgChatMessages.scrollTop = dbgChatMessages.scrollHeight;
+        chatHistory.push({ role: role, content: text });
     }
 
     // --- BUG DEBUGGER LOGIC ---
@@ -205,15 +182,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         setWorkingState(true, "debugger");
         
-        // Append user query to chat
         const formattedUserMsg = `Debug this Python snippet:\n\`\`\`python\n${code}\n\`\`\`${error ? `\n\nError Message:\n\`\`\`\n${error}\n\`\`\`` : ''}`;
         appendDebugMessage("user", formattedUserMsg);
-
-        // Pre-timeline steps
-        renderTimeline([
-            { name: "Classify Error", status: "pending", detail: "Analyzing error type..." },
-            { name: "Retrieve Reference Docs", status: "pending", detail: "Searching local RAG guides..." }
-        ], dbgTimelineSteps);
 
         try {
             const response = await fetch("/api/debug", {
@@ -225,29 +195,16 @@ document.addEventListener("DOMContentLoaded", () => {
             const data = await response.json();
 
             if (data.status === "success") {
-                renderTimeline(data.steps, dbgTimelineSteps);
                 appendDebugMessage("assistant", data.output);
-                setAgentStatus("success", `Agent Idle (${data.error_type})`);
             } else {
-                setAgentStatus("failed", "Agent Error");
                 appendDebugMessage("system", "Debugging agent failed to execute.");
             }
         } catch (err) {
-            setAgentStatus("failed", "Connection Failed");
             appendDebugMessage("system", `HTTP communication failed: ${err.message}`);
         } finally {
             setWorkingState(false, "debugger");
         }
     });
-
-    function appendDebugMessage(role, text) {
-        const bubble = document.createElement("div");
-        bubble.className = `${role}-bubble message`;
-        bubble.innerHTML = parseMarkdown(text);
-        dbgChatMessages.appendChild(bubble);
-        dbgChatMessages.scrollTop = dbgChatMessages.scrollHeight;
-        chatHistory.push({ role: role, content: text });
-    }
 
     async function sendChatFollowUp() {
         const message = dbgChatUserInput.value.trim();
@@ -306,16 +263,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
         setWorkingState(true, "generator");
 
-        // Set up template timeline steps
-        renderTimeline([
-            { name: "Search Concept Database", status: "pending", detail: "Querying RAG vectors..." },
-            { name: "Write Code & Learning Guide", status: "pending", detail: "Structuring explanation..." }
-        ], genTimelineSteps);
-
-        // Reset output bubble
         genOutputMessages.innerHTML = `
             <div class="system-bubble message">
-                <p><i data-lucide="loader" class="spinning"></i> The agent is retrieving references, drafting code, and executing compiles to ensure correct outputs...</p>
+                <p><i data-lucide="loader" class="spinning"></i> The agent is drafting code and executing sandbox validation compiles...</p>
             </div>`;
         lucide.createIcons();
 
@@ -329,23 +279,18 @@ document.addEventListener("DOMContentLoaded", () => {
             const data = await response.json();
 
             if (data.status === "success") {
-                renderTimeline(data.steps, genTimelineSteps);
-                
-                // Populate result
                 genOutputMessages.innerHTML = "";
                 const bubble = document.createElement("div");
                 bubble.className = "assistant-bubble message";
                 bubble.innerHTML = parseMarkdown(data.output);
                 genOutputMessages.appendChild(bubble);
             } else {
-                setAgentStatus("failed", "Agent Error");
                 genOutputMessages.innerHTML = `
                     <div class="system-bubble message">
                         <p style="color:var(--status-failed);">Generation error occurred.</p>
                     </div>`;
             }
         } catch (err) {
-            setAgentStatus("failed", "Connection Failed");
             genOutputMessages.innerHTML = `
                 <div class="system-bubble message">
                     <p style="color:var(--status-failed);">Connection failed: ${err.message}</p>
@@ -357,11 +302,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     genBtnClear.addEventListener("click", () => {
         genPromptInput.value = "";
-        genTimelineSteps.innerHTML = `
-            <div class="timeline-empty">
-                <i data-lucide="info"></i>
-                <p>Timeline cleared.</p>
-            </div>`;
         genOutputMessages.innerHTML = `
             <div class="system-bubble message">
                 <p>Welcome! Describe what you'd like to build above and select a topic to get started.</p>
@@ -369,42 +309,128 @@ document.addEventListener("DOMContentLoaded", () => {
         lucide.createIcons();
     });
 
-    // --- ADMIN CONTROLS TRIGGER ---
-    btnReindex.addEventListener("click", async () => {
-        btnReindex.disabled = true;
-        const oldHtml = btnReindex.innerHTML;
-        btnReindex.innerHTML = `<i data-lucide="loader" class="spinning"></i> Reindexing...`;
+    // --- GITHUB ANALYZER LOGIC ---
+    btnAnalyzeRepo.addEventListener("click", async () => {
+        const repoUrl = repoUrlInput.value.trim();
+        if (!repoUrl) {
+            alert("Please provide a public GitHub repository link!");
+            return;
+        }
+
+        setWorkingState(true, "analyzer-repo");
+        repoMetaSummary.style.display = "none";
+        repoFileList.innerHTML = `<div class="empty-explorer"><i data-lucide="loader" class="spinning"></i> Scanning repository code hierarchy...</div>`;
         lucide.createIcons();
 
         try {
-            const res = await fetch("/api/reindex", { method: "POST" });
-            const data = await res.json();
-            alert("RAG index rebuilding successfully triggered in background! Check terminal/docker console logs for confirmation.");
-        } catch (e) {
-            alert(`Reindexing request failed: ${e.message}`);
+            const response = await fetch("/api/analyze-repo", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ repo_url: repoUrl })
+            });
+
+            const data = await response.json();
+
+            if (data.status === "success") {
+                // Render stats metadata
+                repoMetaSummary.style.display = "grid";
+                repoMetaSummary.innerHTML = `
+                    <div class="meta-stat-item">Repository: <strong>${data.repo_name}</strong></div>
+                    <div class="meta-stat-item">Scanned Files: <strong>${data.statistics.files}</strong></div>
+                    <div class="meta-stat-item">Call Links: <strong>${data.statistics.edges}</strong></div>
+                    <div class="meta-stat-item">Functions Mapped: <strong>${data.statistics.functions}</strong></div>
+                `;
+
+                // Render File Explorer tree selection list
+                repoFileList.innerHTML = "";
+                if (data.files_list && data.files_list.length > 0) {
+                    data.files_list.forEach((filePath) => {
+                        const fileItem = document.createElement("div");
+                        fileItem.className = "explorer-item";
+                        fileItem.innerHTML = `<i data-lucide="file-code"></i><span>${filePath}</span>`;
+                        
+                        fileItem.addEventListener("click", () => {
+                            // Clear previous selection
+                            document.querySelectorAll(".explorer-item").forEach(item => item.classList.remove("selected"));
+                            fileItem.classList.add("selected");
+                            selectedFilePath = filePath;
+                            btnCheckImpact.disabled = false;
+                        });
+
+                        repoFileList.appendChild(fileItem);
+                    });
+                } else {
+                    repoFileList.innerHTML = `<div class="empty-explorer">No Python source files scanned in the repository folder.</div>`;
+                }
+            } else {
+                repoFileList.innerHTML = `<div class="empty-explorer" style="color:var(--status-failed);">Failed to map the repository index.</div>`;
+            }
+        } catch (err) {
+            repoFileList.innerHTML = `<div class="empty-explorer" style="color:var(--status-failed);">Error: ${err.message}</div>`;
         } finally {
-            btnReindex.disabled = false;
-            btnReindex.innerHTML = oldHtml;
+            setWorkingState(false, "analyzer-repo");
             lucide.createIcons();
         }
     });
 
-    btnRetrain.addEventListener("click", async () => {
-        btnRetrain.disabled = true;
-        const oldHtml = btnRetrain.innerHTML;
-        btnRetrain.innerHTML = `<i data-lucide="loader" class="spinning"></i> Retraining...`;
+    btnCheckImpact.addEventListener("click", async () => {
+        const codeChange = analyzerChangeInput.value.trim();
+        if (!selectedFilePath) {
+            alert("Please select a target file from the explorer structure first!");
+            return;
+        }
+        if (!codeChange) {
+            alert("Please paste the proposed modifications/updates first!");
+            return;
+        }
+
+        setWorkingState(true, "analyzer-impact");
+
+        analyzerOutputMessages.innerHTML = `
+            <div class="system-bubble message">
+                <p><i data-lucide="loader" class="spinning"></i> Analyzing the dependency topology and querying callers from the Graph index...</p>
+            </div>`;
         lucide.createIcons();
 
         try {
-            const res = await fetch("/api/retrain", { method: "POST" });
-            const data = await res.json();
-            alert("Classifier retraining successfully triggered in background! Check terminal/docker console logs for confirmation.");
-        } catch (e) {
-            alert(`Model retraining request failed: ${e.message}`);
+            const response = await fetch("/api/check-impact", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    file_path: selectedFilePath,
+                    code_change: codeChange
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.status === "success") {
+                analyzerOutputMessages.innerHTML = "";
+                const bubble = document.createElement("div");
+                bubble.className = "assistant-bubble message";
+                bubble.innerHTML = parseMarkdown(data.report);
+                analyzerOutputMessages.appendChild(bubble);
+            } else {
+                analyzerOutputMessages.innerHTML = `
+                    <div class="system-bubble message">
+                        <p style="color:var(--status-failed);">Impact calculation error.</p>
+                    </div>`;
+            }
+        } catch (err) {
+            analyzerOutputMessages.innerHTML = `
+                <div class="system-bubble message">
+                    <p style="color:var(--status-failed);">Communication failed: ${err.message}</p>
+                </div>`;
         } finally {
-            btnRetrain.disabled = false;
-            btnRetrain.innerHTML = oldHtml;
-            lucide.createIcons();
+            setWorkingState(false, "analyzer-impact");
         }
+    });
+
+    btnClearAnalyzer.addEventListener("click", () => {
+        analyzerChangeInput.value = "";
+        analyzerOutputMessages.innerHTML = `
+            <div class="system-bubble message">
+                <p>Welcome! Specify modifications on the left to check codebase impact logs.</p>
+            </div>`;
     });
 });

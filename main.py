@@ -7,8 +7,10 @@ from typing import List, Optional
 from agent.core import build_agent, build_gen_agent
 from classifier.train import train as train_classifier
 from rag.loader import load_docs_to_chromadb
+from repo_analyzer.routes import router as repo_router
 
 app = FastAPI(title="AI Code Debugger API")
+app.include_router(repo_router)
 
 # Mount the static folder for CSS, JS and other frontend assets
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
