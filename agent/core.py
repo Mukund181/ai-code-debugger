@@ -7,12 +7,20 @@ from agent.tools import classify_error, retrieve_docs, execute_code
 load_dotenv()
 
 _agent = None
+_gen_agent = None
 
 def build_agent():
     global _agent
     if _agent is None:
         _agent = DebugAgent()
     return _agent
+
+def build_gen_agent():
+    global _gen_gen_agent, _gen_agent
+    global _gen_agent
+    if _gen_agent is None:
+        _gen_agent = GenerationAgent()
+    return _gen_agent
 
 
 class DebugAgent:
@@ -183,5 +191,163 @@ Please analyze the execution error and write a corrected version of the code ins
             "output": current_explanation,
             "steps": steps,
             "error_type": error_type,
+            "execution_result": exec_details
+        }
+
+
+class GenerationAgent:
+    def __init__(self):
+        self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        self.model  = "llama-3.1-8b-instant"
+
+    def invoke(self, inputs: dict) -> dict:
+        prompt_input = inputs.get("input", "")
+        topic        = inputs.get("topic", "")
+        steps        = []
+
+        # Step 1: Search Concept Database
+        steps.append({
+            "name": "Search Concept Database",
+            "status": "pending",
+            "detail": f"Searching RAG vector store for material on '{prompt_input}'..."
+        })
+        try:
+            query = f"{topic} {prompt_input}" if topic else prompt_input
+            retrieved = retrieve_docs.invoke(query)[:800]
+            steps[-1]["status"] = "success"
+            steps[-1]["detail"] = "Retrieved instructional material from vector database."
+        except Exception as e:
+            retrieved = ""
+            steps[-1]["status"] = "failed"
+            steps[-1]["detail"] = f"RAG query failed ({str(e)}), proceeding without local database guides."
+
+        # Step 2: Write Code & Learning Guide
+        steps.append({
+            "name": "Write Code & Learning Guide",
+            "status": "pending",
+            "detail": "Asking Groq LLM to generate verified code and CS concepts tutorial..."
+        })
+
+        system_prompt = (
+            "You are an expert computer science instructor and code generator. "
+            "Write highly clear, self-contained Python code in standard markdown ```python ... ``` blocks, "
+            "followed by a detailed conceptual tutorial explaining the logic, the computational principles, "
+            "and complexity (Time and Space complexity using Big-O notation)."
+        )
+
+        user_prompt = f"""Write a Python script to solve this prompt:
+"{prompt_input}"
+
+Category / Topic context: {topic}
+Reference documentation:
+{retrieved}
+
+Ensure the code:
+1. Is complete, fully functional, and standalone (with sample inputs/outputs).
+2. Contains no external dependencies not standard in Python.
+3. Is enclosed in a ```python ... ``` block.
+
+Also provide a brief educational guide below the code block:
+- Explanation of how it works.
+- Key computer science concepts involved.
+- Big-O Time & Space Complexity analysis.
+"""
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1024,
+            )
+            current_explanation = response.choices[0].message.content
+            steps[-1]["status"] = "success"
+            steps[-1]["detail"] = "Generated code snippet and CS concept tutorial."
+        except Exception as e:
+            steps[-1]["status"] = "failed"
+            steps[-1]["detail"] = f"LLM generation failed: {str(e)}"
+            return {
+                "output": "Error: Failed to contact AI model.",
+                "steps": steps,
+                "execution_result": ""
+            }
+
+        # Step 3: Sandbox Verification & Self-Correction
+        steps.append({
+            "name": "Sandbox Verification & Self-Correction",
+            "status": "pending",
+            "detail": "Extracting generated code and compiling in sandbox..."
+        })
+
+        max_attempts = 3
+        success = False
+        exec_details = ""
+
+        for attempt in range(1, max_attempts + 1):
+            # Extract code block
+            code_blocks = re.findall(r"```python\n(.*?)```", current_explanation, re.DOTALL)
+            if not code_blocks:
+                code_blocks = re.findall(r"```\n(.*?)```", current_explanation, re.DOTALL)
+
+            if not code_blocks:
+                exec_details = "No executable code blocks found to verify."
+                success = True
+                break
+
+            current_code = code_blocks[0]
+            steps[-1]["detail"] = f"Running code verification (Attempt {attempt}/{max_attempts})..."
+
+            try:
+                exec_details = execute_code.invoke(current_code)
+            except Exception as e:
+                exec_details = f"ERROR: Subprocess run failed: {str(e)}"
+
+            has_error = "ERROR" in exec_details or "Traceback" in exec_details or "Exception" in exec_details
+
+            if not has_error:
+                success = True
+                steps[-1]["detail"] = f"Attempt {attempt}: Code compiled and executed successfully!"
+                break
+            else:
+                steps[-1]["detail"] = f"Attempt {attempt} failed. Compilation/Execution error! Asking LLM to self-correct..."
+                correction_prompt = f"""The Python script you wrote has execution errors.
+Execution Error:
+{exec_details}
+
+Here was the code:
+```python
+{current_code}
+```
+
+Please analyze the execution error and write a corrected version of the code inside a new ```python ... ``` block, keeping the tutorial explanation intact. Ensure all variables and modules are defined.
+"""
+                try:
+                    response = self.client.chat.completions.create(
+                        model=self.model,
+                        messages=[
+                            {"role": "system", "content": "You are an expert Python debugging assistant. Correct the code you generated so it executes without error."},
+                            {"role": "user", "content": correction_prompt}
+                        ],
+                        temperature=0.1,
+                        max_tokens=1024,
+                    )
+                    current_explanation = response.choices[0].message.content
+                except Exception as e:
+                    exec_details += f"\n(Correction call failed: {str(e)})"
+                    break
+
+        if success:
+            steps[-1]["status"] = "success"
+            steps[-1]["detail"] = f"Code verified successfully.\n\nSandbox Execution Output:\n{exec_details}"
+        else:
+            steps[-1]["status"] = "failed"
+            steps[-1]["detail"] = f"Code failed compilation checks within {max_attempts} attempts.\n\nLast execution traceback:\n{exec_details}"
+
+        return {
+            "output": current_explanation,
+            "steps": steps,
             "execution_result": exec_details
         }

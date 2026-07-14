@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional
-from agent.core import build_agent
+from agent.core import build_agent, build_gen_agent
 from classifier.train import train as train_classifier
 from rag.loader import load_docs_to_chromadb
 
@@ -53,6 +53,10 @@ class ChatRequest(BaseModel):
     message: str
     history: List[ChatMessage]
 
+class GenerateRequest(BaseModel):
+    prompt: str
+    topic: Optional[str] = ""
+
 @app.get("/")
 async def get_index():
     index_path = os.path.join(static_dir, "index.html")
@@ -85,6 +89,27 @@ async def debug_code(payload: DebugRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
+
+@app.post("/api/generate")
+async def generate_code(payload: GenerateRequest):
+    if not payload.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty.")
+    
+    agent = build_gen_agent()
+    
+    try:
+        result = agent.invoke({
+            "input": payload.prompt,
+            "topic": payload.topic
+        })
+        return {
+            "status": "success",
+            "output": result.get("output", "No response returned."),
+            "steps": result.get("steps", []),
+            "execution_result": result.get("execution_result", "")
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Generation agent failed: {str(e)}")
 
 @app.post("/api/chat")
 async def chat(payload: ChatRequest):

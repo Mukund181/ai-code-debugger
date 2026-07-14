@@ -1,39 +1,74 @@
 document.addEventListener("DOMContentLoaded", () => {
-    // DOM Elements
-    const codeInput = document.getElementById("code-input");
-    const errorInput = document.getElementById("error-input");
-    const btnDebug = document.getElementById("btn-debug");
+    // Nav Tabs Elements
+    const tabDebugger = document.getElementById("tab-debugger");
+    const tabGenerator = document.getElementById("tab-generator");
+    const debuggerContainer = document.getElementById("debugger-container");
+    const generatorContainer = document.getElementById("generator-container");
+
+    // Common DOM Elements
     const btnReindex = document.getElementById("btn-reindex");
     const btnRetrain = document.getElementById("btn-retrain");
-    const btnClearChat = document.getElementById("btn-clear-chat");
-    const timelineSteps = document.getElementById("timeline-steps");
-    const chatMessages = document.getElementById("chat-messages");
-    const chatUserInput = document.getElementById("chat-user-input");
-    const btnChatSend = document.getElementById("btn-chat-send");
     const agentStatusBadge = document.getElementById("agent-status-badge");
-    const lineNumbers = document.querySelector(".line-numbers");
+
+    // Tab 1: Debugger Workspace DOM Elements
+    const dbgLineNumbers = document.getElementById("dbg-line-numbers");
+    const dbgCodeInput = document.getElementById("code-input");
+    const dbgErrorInput = document.getElementById("error-input");
+    const dbgBtnDebug = document.getElementById("btn-debug");
+    const dbgTimelineSteps = document.getElementById("timeline-steps");
+    const dbgChatMessages = document.getElementById("chat-messages");
+    const dbgChatUserInput = document.getElementById("chat-user-input");
+    const dbgBtnChatSend = document.getElementById("btn-chat-send");
+    const dbgBtnClearChat = document.getElementById("btn-clear-chat");
+
+    // Tab 2: Generator & Learning Hub DOM Elements
+    const genTopic = document.getElementById("gen-topic");
+    const genPromptInput = document.getElementById("gen-prompt-input");
+    const genBtnGenerate = document.getElementById("btn-generate");
+    const genTimelineSteps = document.getElementById("gen-timeline-steps");
+    const genOutputMessages = document.getElementById("gen-output-messages");
+    const genBtnClear = document.getElementById("btn-clear-gen");
 
     let chatHistory = [];
 
-    // Line numbering sync
+    // --- TAB SWITCHING WORKFLOW ---
+    function switchTab(tabId) {
+        if (tabId === "debugger") {
+            tabDebugger.classList.add("active");
+            tabGenerator.classList.remove("active");
+            debuggerContainer.classList.add("active");
+            generatorContainer.classList.remove("active");
+        } else {
+            tabDebugger.classList.remove("active");
+            tabGenerator.classList.add("active");
+            debuggerContainer.classList.remove("active");
+            generatorContainer.classList.add("active");
+        }
+        lucide.createIcons();
+    }
+
+    tabDebugger.addEventListener("click", () => switchTab("debugger"));
+    tabGenerator.addEventListener("click", () => switchTab("generator"));
+
+    // --- LINE NUMBER GENERATOR ---
     function updateLineNumbers() {
-        const linesCount = codeInput.value.split("\n").length;
-        lineNumbers.innerHTML = "";
+        const linesCount = dbgCodeInput.value.split("\n").length;
+        dbgLineNumbers.innerHTML = "";
         for (let i = 1; i <= Math.max(linesCount, 10); i++) {
             const span = document.createElement("span");
             span.textContent = i;
-            lineNumbers.appendChild(span);
+            dbgLineNumbers.appendChild(span);
         }
     }
-    codeInput.addEventListener("input", updateLineNumbers);
+    dbgCodeInput.addEventListener("input", updateLineNumbers);
     updateLineNumbers();
 
-    // Markdown Parser Helper
+    // --- MARKDOWN PARSER ---
     function parseMarkdown(text) {
         if (!text) return "";
         let html = text;
 
-        // Escape HTML tags to prevent XSS
+        // Escape standard HTML characters for XSS prevention
         html = html
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
@@ -59,7 +94,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Unordered lists
         html = html.replace(/^\s*[-*]\s+(.*?)$/gm, '<li>$1</li>');
-        // Wrap contiguous list items in <ul>
         html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
 
         // Newlines
@@ -75,40 +109,39 @@ document.addEventListener("DOMContentLoaded", () => {
         agentStatusBadge.querySelector(".status-text").textContent = text;
     }
 
-    // Toggle Buttons State
-    function setWorkingState(isWorking) {
+    // Toggle Loading States
+    function setWorkingState(isWorking, agentType = "debugger") {
         if (isWorking) {
-            btnDebug.disabled = true;
-            btnDebug.innerHTML = `<i data-lucide="loader" class="spinning"></i> Working...`;
-            chatUserInput.disabled = true;
-            btnChatSend.disabled = true;
-            lucide.createIcons();
+            setAgentStatus("pending", "Agent Running...");
+            if (agentType === "debugger") {
+                dbgBtnDebug.disabled = true;
+                dbgBtnDebug.innerHTML = `<i data-lucide="loader" class="spinning"></i> Working...`;
+                dbgChatUserInput.disabled = true;
+                dbgBtnChatSend.disabled = true;
+            } else {
+                genBtnGenerate.disabled = true;
+                genBtnGenerate.innerHTML = `<i data-lucide="loader" class="spinning"></i> Working...`;
+            }
         } else {
-            btnDebug.disabled = false;
-            btnDebug.innerHTML = `<i data-lucide="play"></i> Start Debugging Agent`;
-            chatUserInput.disabled = false;
-            btnChatSend.disabled = false;
-            lucide.createIcons();
+            setAgentStatus("idle", "Agent Idle");
+            if (agentType === "debugger") {
+                dbgBtnDebug.disabled = false;
+                dbgBtnDebug.innerHTML = `<i data-lucide="play"></i> Start Debugging Agent`;
+                dbgChatUserInput.disabled = false;
+                dbgBtnChatSend.disabled = false;
+            } else {
+                genBtnGenerate.disabled = false;
+                genBtnGenerate.innerHTML = `<i data-lucide="sparkles"></i> Generate Code & Learn`;
+            }
         }
+        lucide.createIcons();
     }
 
-    // Append Message to Chat Panel
-    function appendMessage(role, rawContent) {
-        const bubble = document.createElement("div");
-        bubble.className = `${role}-bubble message`;
-        bubble.innerHTML = parseMarkdown(rawContent);
-        chatMessages.appendChild(bubble);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-
-        // Save to chat history for context
-        chatHistory.push({ role: role, content: rawContent });
-    }
-
-    // Render Timeline Steps
-    function renderTimeline(steps) {
-        timelineSteps.innerHTML = "";
+    // --- TIMELINE STEP RENDERING ENGINE ---
+    function renderTimeline(steps, containerElement) {
+        containerElement.innerHTML = "";
         if (!steps || steps.length === 0) {
-            timelineSteps.innerHTML = `
+            containerElement.innerHTML = `
                 <div class="timeline-empty">
                     <i data-lucide="info"></i>
                     <p>No activity logged yet.</p>
@@ -117,22 +150,21 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
 
-        steps.forEach((step, idx) => {
+        steps.forEach((step) => {
             const stepDiv = document.createElement("div");
             stepDiv.className = `timeline-step step-state-${step.status}`;
 
-            // Icons mapping
             let iconName = "circle";
             if (step.status === "pending") iconName = "loader";
             if (step.status === "success") iconName = "check-circle-2";
             if (step.status === "failed") iconName = "x-circle";
 
-            const isLoader = step.status === "pending" ? "spinning" : "";
+            const isSpinner = step.status === "pending" ? "spinning" : "";
 
             stepDiv.innerHTML = `
                 <div class="step-header">
                     <div class="step-header-left">
-                        <span class="step-icon"><i data-lucide="${iconName}" class="${isLoader}"></i></span>
+                        <span class="step-icon"><i data-lucide="${iconName}" class="${isSpinner}"></i></span>
                         <span class="step-title">${step.name}</span>
                     </div>
                     <span class="step-arrow"><i data-lucide="chevron-down"></i></span>
@@ -140,7 +172,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 <div class="step-details" style="display: none;">${step.detail}</div>
             `;
 
-            // Toggle collapsible details
             const header = stepDiv.querySelector(".step-header");
             const details = stepDiv.querySelector(".step-details");
             const arrow = stepDiv.querySelector(".step-arrow");
@@ -151,40 +182,38 @@ document.addEventListener("DOMContentLoaded", () => {
                 arrow.style.transform = isOpen ? "rotate(0deg)" : "rotate(180deg)";
             });
 
-            // Automatically open step details if it's currently active or failed
             if (step.status === "pending" || step.status === "failed") {
                 details.style.display = "block";
                 arrow.style.transform = "rotate(180deg)";
             }
 
-            timelineSteps.appendChild(stepDiv);
+            containerElement.appendChild(stepDiv);
         });
 
         lucide.createIcons();
     }
 
-    // Main Action: Trigger Debugging
-    btnDebug.addEventListener("click", async () => {
-        const code = codeInput.value.trim();
-        const error = errorInput.value.trim();
+    // --- BUG DEBUGGER LOGIC ---
+    dbgBtnDebug.addEventListener("click", async () => {
+        const code = dbgCodeInput.value.trim();
+        const error = dbgErrorInput.value.trim();
 
         if (!code) {
             alert("Please paste your buggy python code first!");
             return;
         }
 
-        // Initialize state
-        setWorkingState(true);
-        setAgentStatus("pending", "Agent Debugging...");
+        setWorkingState(true, "debugger");
         
-        // Push user query to chat bubble
-        appendMessage("user", `Debug this Python snippet:\n\`\`\`python\n${code}\n\`\`\`${error ? `\n\nError Message:\n\`\`\`\n${error}\n\`\`\`` : ''}`);
+        // Append user query to chat
+        const formattedUserMsg = `Debug this Python snippet:\n\`\`\`python\n${code}\n\`\`\`${error ? `\n\nError Message:\n\`\`\`\n${error}\n\`\`\`` : ''}`;
+        appendDebugMessage("user", formattedUserMsg);
 
-        // Set up mock starting timeline
+        // Pre-timeline steps
         renderTimeline([
-            { name: "Classify Error", status: "pending", detail: "Analyzing inputs..." },
-            { name: "Retrieve Reference Docs", status: "pending", detail: "RAG lookup scheduled..." }
-        ]);
+            { name: "Classify Error", status: "pending", detail: "Analyzing error type..." },
+            { name: "Retrieve Reference Docs", status: "pending", detail: "Searching local RAG guides..." }
+        ], dbgTimelineSteps);
 
         try {
             const response = await fetch("/api/debug", {
@@ -196,32 +225,37 @@ document.addEventListener("DOMContentLoaded", () => {
             const data = await response.json();
 
             if (data.status === "success") {
-                // Populate the final steps and answers
-                renderTimeline(data.steps);
-                appendMessage("assistant", data.output);
+                renderTimeline(data.steps, dbgTimelineSteps);
+                appendDebugMessage("assistant", data.output);
                 setAgentStatus("success", `Agent Idle (${data.error_type})`);
             } else {
                 setAgentStatus("failed", "Agent Error");
-                appendMessage("system", "The debugging agent encountered an unrecoverable failure during the execution run.");
+                appendDebugMessage("system", "Debugging agent failed to execute.");
             }
         } catch (err) {
             setAgentStatus("failed", "Connection Failed");
-            appendMessage("system", `Failed to communicate with FastAPI server. Error: ${err.message}`);
+            appendDebugMessage("system", `HTTP communication failed: ${err.message}`);
         } finally {
-            setWorkingState(false);
+            setWorkingState(false, "debugger");
         }
     });
 
-    // Chat Follow-up
+    function appendDebugMessage(role, text) {
+        const bubble = document.createElement("div");
+        bubble.className = `${role}-bubble message`;
+        bubble.innerHTML = parseMarkdown(text);
+        dbgChatMessages.appendChild(bubble);
+        dbgChatMessages.scrollTop = dbgChatMessages.scrollHeight;
+        chatHistory.push({ role: role, content: text });
+    }
+
     async function sendChatFollowUp() {
-        const message = chatUserInput.value.trim();
+        const message = dbgChatUserInput.value.trim();
         if (!message) return;
 
-        chatUserInput.value = "";
-        setWorkingState(true);
-        setAgentStatus("pending", "Agent Thinking...");
-        
-        appendMessage("user", message);
+        dbgChatUserInput.value = "";
+        setWorkingState(true, "debugger");
+        appendDebugMessage("user", message);
 
         try {
             const response = await fetch("/api/chat", {
@@ -229,80 +263,148 @@ document.addEventListener("DOMContentLoaded", () => {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     message: message,
-                    history: chatHistory.slice(0, -1) // Excluding the user message we just appended
+                    history: chatHistory.slice(0, -1)
                 })
             });
 
             const data = await response.json();
 
             if (data.status === "success") {
-                appendMessage("assistant", data.output);
-                setAgentStatus("success", "Agent Idle");
+                appendDebugMessage("assistant", data.output);
             } else {
-                setAgentStatus("failed", "Agent Error");
-                appendMessage("system", "Failed to retrieve follow-up answer from the agent.");
+                appendDebugMessage("system", "Failed to retrieve follow-up answer from the agent.");
             }
         } catch (err) {
-            setAgentStatus("failed", "Connection Failed");
-            appendMessage("system", `Failed to retrieve chat reply. Error: ${err.message}`);
+            appendDebugMessage("system", `Chat failed. Connection error: ${err.message}`);
         } finally {
-            setWorkingState(false);
+            setWorkingState(false, "debugger");
         }
     }
 
-    btnChatSend.addEventListener("click", sendChatFollowUp);
-    chatUserInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-            sendChatFollowUp();
-        }
+    dbgBtnChatSend.addEventListener("click", sendChatFollowUp);
+    dbgChatUserInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") sendChatFollowUp();
     });
 
-    // Reindex RAG Trigger
-    btnReindex.addEventListener("click", async () => {
-        btnReindex.disabled = true;
-        const originalText = btnReindex.innerHTML;
-        btnReindex.innerHTML = `<i data-lucide="loader" class="spinning"></i> Indexing...`;
-        lucide.createIcons();
-
-        try {
-            const response = await fetch("/api/reindex", { method: "POST" });
-            const data = await response.json();
-            alert("RAG index rebuilding successfully triggered in background! Check console output for completion status.");
-        } catch (err) {
-            alert(`Failed to trigger RAG indexing: ${err.message}`);
-        } finally {
-            btnReindex.disabled = false;
-            btnReindex.innerHTML = originalText;
-            lucide.createIcons();
-        }
-    });
-
-    // Retrain Model Trigger
-    btnRetrain.addEventListener("click", async () => {
-        btnRetrain.disabled = true;
-        const originalText = btnRetrain.innerHTML;
-        btnRetrain.innerHTML = `<i data-lucide="loader" class="spinning"></i> Training...`;
-        lucide.createIcons();
-
-        try {
-            const response = await fetch("/api/retrain", { method: "POST" });
-            const data = await response.json();
-            alert("Neural network classifier retraining successfully triggered in background! Check console output for completion status.");
-        } catch (err) {
-            alert(`Failed to trigger model training: ${err.message}`);
-        } finally {
-            btnRetrain.disabled = false;
-            btnRetrain.innerHTML = originalText;
-            lucide.createIcons();
-        }
-    });
-
-    // Clear Chat History
-    btnClearChat.addEventListener("click", () => {
+    dbgBtnClearChat.addEventListener("click", () => {
         chatHistory = [];
-        chatMessages.innerHTML = `
+        dbgChatMessages.innerHTML = `
             <div class="system-bubble message">
                 <p>Chat history cleared. Send a new debugging request or ask details about the workspace.</p>
             </div>`;
+    });
+
+    // --- CODE GENERATOR & LEARNING LOGIC ---
+    genBtnGenerate.addEventListener("click", async () => {
+        const prompt = genPromptInput.value.trim();
+        const topic = genTopic.value;
+
+        if (!prompt) {
+            alert("Please specify a program or topic description first!");
+            return;
+        }
+
+        setWorkingState(true, "generator");
+
+        // Set up template timeline steps
+        renderTimeline([
+            { name: "Search Concept Database", status: "pending", detail: "Querying RAG vectors..." },
+            { name: "Write Code & Learning Guide", status: "pending", detail: "Structuring explanation..." }
+        ], genTimelineSteps);
+
+        // Reset output bubble
+        genOutputMessages.innerHTML = `
+            <div class="system-bubble message">
+                <p><i data-lucide="loader" class="spinning"></i> The agent is retrieving references, drafting code, and executing compiles to ensure correct outputs...</p>
+            </div>`;
+        lucide.createIcons();
+
+        try {
+            const response = await fetch("/api/generate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt: prompt, topic: topic })
+            });
+
+            const data = await response.json();
+
+            if (data.status === "success") {
+                renderTimeline(data.steps, genTimelineSteps);
+                
+                // Populate result
+                genOutputMessages.innerHTML = "";
+                const bubble = document.createElement("div");
+                bubble.className = "assistant-bubble message";
+                bubble.innerHTML = parseMarkdown(data.output);
+                genOutputMessages.appendChild(bubble);
+            } else {
+                setAgentStatus("failed", "Agent Error");
+                genOutputMessages.innerHTML = `
+                    <div class="system-bubble message">
+                        <p style="color:var(--status-failed);">Generation error occurred.</p>
+                    </div>`;
+            }
+        } catch (err) {
+            setAgentStatus("failed", "Connection Failed");
+            genOutputMessages.innerHTML = `
+                <div class="system-bubble message">
+                    <p style="color:var(--status-failed);">Connection failed: ${err.message}</p>
+                </div>`;
+        } finally {
+            setWorkingState(false, "generator");
+        }
+    });
+
+    genBtnClear.addEventListener("click", () => {
+        genPromptInput.value = "";
+        genTimelineSteps.innerHTML = `
+            <div class="timeline-empty">
+                <i data-lucide="info"></i>
+                <p>Timeline cleared.</p>
+            </div>`;
+        genOutputMessages.innerHTML = `
+            <div class="system-bubble message">
+                <p>Welcome! Describe what you'd like to build above and select a topic to get started.</p>
+            </div>`;
+        lucide.createIcons();
+    });
+
+    // --- ADMIN CONTROLS TRIGGER ---
+    btnReindex.addEventListener("click", async () => {
+        btnReindex.disabled = true;
+        const oldHtml = btnReindex.innerHTML;
+        btnReindex.innerHTML = `<i data-lucide="loader" class="spinning"></i> Reindexing...`;
+        lucide.createIcons();
+
+        try {
+            const res = await fetch("/api/reindex", { method: "POST" });
+            const data = await res.json();
+            alert("RAG index rebuilding successfully triggered in background! Check terminal/docker console logs for confirmation.");
+        } catch (e) {
+            alert(`Reindexing request failed: ${e.message}`);
+        } finally {
+            btnReindex.disabled = false;
+            btnReindex.innerHTML = oldHtml;
+            lucide.createIcons();
+        }
+    });
+
+    btnRetrain.addEventListener("click", async () => {
+        btnRetrain.disabled = true;
+        const oldHtml = btnRetrain.innerHTML;
+        btnRetrain.innerHTML = `<i data-lucide="loader" class="spinning"></i> Retraining...`;
+        lucide.createIcons();
+
+        try {
+            const res = await fetch("/api/retrain", { method: "POST" });
+            const data = await res.json();
+            alert("Classifier retraining successfully triggered in background! Check terminal/docker console logs for confirmation.");
+        } catch (e) {
+            alert(`Model retraining request failed: ${e.message}`);
+        } finally {
+            btnRetrain.disabled = false;
+            btnRetrain.innerHTML = oldHtml;
+            lucide.createIcons();
+        }
     });
 });
