@@ -1,0 +1,25 @@
+=== REPOSITORY ANALYSIS DIAGNOSTICS ===
+
+Downloading ERP-System from: https://github.com/Mukund181/ERP-System/archive/refs/heads/main.zip
+Download success.
+Extraction success.
+Extracted directories: ['ERP-System-main']
+Scanning target path: C:\Users\mukun\AppData\Local\Temp\tmpayc_jpe0\ERP-System-main
+Total files found recursively: 5
+ - app.py (Ext: .py, Supported: True)
+   Parsing app.py...
+   Parse result keys: ['imports', 'classes', 'functions', 'raw_code', 'parse_warning']
+ - README.md (Ext: .md, Supported: True)
+   Parsing README.md...
+   Parse result keys: ['imports', 'classes', 'functions', 'raw_code']
+ - requirements.txt (Ext: .txt, Supported: True)
+   Parsing requirements.txt...
+   Parse result keys: ['imports', 'classes', 'functions', 'raw_code']
+ - database\schema.sql (Ext: .sql, Supported: True)
+   Parsing database\schema.sql...
+   Parse result keys: ['imports', 'classes', 'functions', 'raw_code']
+ - templates\index.html (Ext: .html, Supported: True)
+   Parsing templates\index.html...
+   Parse result keys: ['imports', 'classes', 'functions', 'raw_code']
+
+Diagnostics completed.

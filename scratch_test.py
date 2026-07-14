@@ -73,6 +73,7 @@ def test_repo_analyzer():
     print("TESTING LOCAL GRAPH RAG DEPENDENCY MAPPER")    
     import tempfile
     import shutil
+    import json
     from repo_analyzer.graph_rag import CodeGraph
     
     temp_dir = tempfile.mkdtemp()
@@ -102,9 +103,35 @@ if __name__ == "__main__":
 """
         with open(os.path.join(temp_dir, "main_app.py"), "w", encoding="utf-8") as f:
             f.write(app_code)
+
+        # Create dummy notebook calling multiply_values
+        notebook_data = {
+            "cells": [
+                {
+                    "cell_type": "code",
+                    "execution_count": 1,
+                    "metadata": {},
+                    "outputs": [],
+                    "source": [
+                        "%matplotlib inline\n",
+                        "from math_helper import multiply_values\n",
+                        "\n",
+                        "def run_notebook_calc():\n",
+                        "    res = multiply_values(5, 5)\n",
+                        "    print(res)\n",
+                        "    return res\n"
+                    ]
+                }
+            ],
+            "metadata": {},
+            "nbformat": 4,
+            "nbformat_minor": 2
+        }
+        with open(os.path.join(temp_dir, "notebook_run.ipynb"), "w", encoding="utf-8") as f:
+            json.dump(notebook_data, f)
             
         graph = CodeGraph()
-        print("Parsing dummy workspace directory...")
+        print("Parsing dummy workspace directory (including notebooks)...")
         graph.build_from_directory(temp_dir)
         
         print(f"Graph nodes parsed: {list(graph.nodes.keys())}")
@@ -120,8 +147,14 @@ if __name__ == "__main__":
         for idx, item in enumerate(impact["impact_chain"]):
             print(f"  {idx+1}: {item['type']} '{item['name']}' in file '{item['file']}' (Depth: {item['depth']})")
             
-        assert len(impact["impact_chain"]) > 0, "Dependency mapping failed to detect any connections!"
-        print("\nGraph RAG tests successful!")
+        # Check that both main_app.py and notebook_run.ipynb are identified as impacted
+        impacted_files = [item['file'] for item in impact["impact_chain"]]
+        print("Impacted files mapped:", impacted_files)
+        
+        assert any("main_app.py" in f for f in impacted_files), "Failed to detect python script dependency!"
+        assert any("notebook_run.ipynb" in f for f in impacted_files), "Failed to detect Jupyter Notebook dependency!"
+        
+        print("\nGraph RAG and Jupyter notebook tests successful!")
     except Exception as e:
         print(f"ERROR: Graph RAG testing failed: {str(e)}", file=sys.stderr)
     finally:

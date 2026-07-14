@@ -1,6 +1,6 @@
 import os
 import json
-from repo_analyzer.ast_parser import parse_file
+from repo_analyzer.ast_parser import parse_any_file, ALL_SOURCE_EXTENSIONS, should_skip_dir
 
 class CodeGraph:
     def __init__(self):
@@ -41,29 +41,44 @@ class CodeGraph:
             self.adj_in[to_node].add((from_node, relation))
 
     def build_from_directory(self, root_dir: str):
-        """Recursively scans a directory for Python files and maps their graph structure."""
+        """Recursively scans a directory for source files and maps their graph structure."""
         self.nodes.clear()
         self.edges.clear()
         self.adj_out.clear()
         self.adj_in.clear()
 
-        # Step 1: Parse AST structure of each Python file
+        # Step 1: Parse structure of each source file
         parsed_files = {}
-        for dirpath, _, filenames in os.walk(root_dir):
+        for dirpath, dirnames, filenames in os.walk(root_dir):
+            # Prune directories we never want to enter
+            dirnames[:] = [d for d in dirnames if not should_skip_dir(d)]
+
             for fname in filenames:
-                if fname.endswith(".py"):
+                ext = os.path.splitext(fname)[1].lower()
+                if ext in ALL_SOURCE_EXTENSIONS:
                     abs_path = os.path.join(dirpath, fname)
-                    # Use path relative to root_dir as identifier
                     rel_path = os.path.relpath(abs_path, root_dir).replace("\\", "/")
-                    parsed = parse_file(abs_path)
-                    if "error" not in parsed:
-                        parsed_files[rel_path] = parsed
+                    parsed = parse_any_file(abs_path)
+                    parsed_files[rel_path] = parsed
 
         # Step 2: Add nodes for files, classes, methods, functions
         for rel_path, structure in parsed_files.items():
             file_node_id = f"file:{rel_path}"
             raw_code = structure.get("raw_code", "")
+            
+            # If there was a parsing error, read the raw code directly as fallback
+            if "error" in structure and not raw_code:
+                try:
+                    with open(os.path.join(root_dir, rel_path), "r", encoding="utf-8", errors="replace") as f:
+                        raw_code = f.read()
+                except Exception:
+                    raw_code = ""
+
             self.add_node(file_node_id, "file", rel_path, rel_path, code=raw_code)
+
+            if "error" in structure:
+                # File is mapped, but skip class/method extraction since it has syntax errors
+                continue
 
             # Classes
             for class_name, class_info in structure.get("classes", {}).items():

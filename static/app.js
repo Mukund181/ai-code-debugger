@@ -8,9 +8,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const generatorContainer = document.getElementById("generator-container");
     const analyzerContainer = document.getElementById("analyzer-container");
 
-    // Common DOM Elements
-    const agentStatusBadge = document.getElementById("agent-status-badge");
-
     // Tab 1: Debugger Workspace DOM Elements
     const dbgLineNumbers = document.getElementById("dbg-line-numbers");
     const dbgCodeInput = document.getElementById("code-input");
@@ -83,41 +80,59 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- MARKDOWN PARSER ---
     function parseMarkdown(text) {
         if (!text) return "";
+        
+        const codeBlocks = [];
         let html = text;
 
-        // Escape HTML tags to prevent raw execution
+        // 1. Extract multi-line code blocks, escape HTML inside them
+        html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+            const index = codeBlocks.length;
+            const escapedCode = code
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+            codeBlocks.push(`<pre><code class="language-${lang || 'none'}">${escapedCode}</code></pre>`);
+            return `__CODE_BLOCK_${index}__`;
+        });
+
+        // 2. Extract inline code blocks
+        html = html.replace(/`([^`\n]+)`/g, (match, code) => {
+            const index = codeBlocks.length;
+            const escapedCode = code
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+            codeBlocks.push(`<code>${escapedCode}</code>`);
+            return `__CODE_BLOCK_${index}__`;
+        });
+
+        // 3. Escape HTML tags in remaining non-code text
         html = html
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;");
 
-        // Code blocks with syntax highlighting
-        html = html.replace(/```python\n([\s\S]*?)```/g, '<pre><code class="language-python">$1</code></pre>');
-        html = html.replace(/```python([\s\S]*?)```/g, '<pre><code class="language-python">$1</code></pre>');
-        html = html.replace(/```cpp\n([\s\S]*?)```/g, '<pre><code class="language-cpp">$1</code></pre>');
-        html = html.replace(/```cpp([\s\S]*?)```/g, '<pre><code class="language-cpp">$1</code></pre>');
-        html = html.replace(/```\n([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-        html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-
-        // Inline code
-        html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
-
-        // Headers
+        // 4. Parse markdown headers
         html = html.replace(/^### (.*?)$/gm, '<h3>$1</h3>');
         html = html.replace(/^## (.*?)$/gm, '<h2>$1</h2>');
         html = html.replace(/^# (.*?)$/gm, '<h1>$1</h1>');
 
-        // Bold and Italic
+        // 5. Parse bold & italic
         html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
         html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
 
-        // Unordered lists
+        // 6. Parse lists
         html = html.replace(/^\s*[-*]\s+(.*?)$/gm, '<li>$1</li>');
         html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
 
-        // Double line breaks
+        // 7. Parse line breaks & paragraphs
         html = html.replace(/\n\n/g, '<p></p>');
         html = html.replace(/\n/g, '<br>');
+
+        // 8. Re-insert formatted code blocks
+        codeBlocks.forEach((block, index) => {
+            html = html.replace(`__CODE_BLOCK_${index}__`, block);
+        });
 
         return html;
     }
@@ -338,7 +353,8 @@ document.addEventListener("DOMContentLoaded", () => {
                     <div class="meta-stat-item">Repository: <strong>${data.repo_name}</strong></div>
                     <div class="meta-stat-item">Scanned Files: <strong>${data.statistics.files}</strong></div>
                     <div class="meta-stat-item">Call Links: <strong>${data.statistics.edges}</strong></div>
-                    <div class="meta-stat-item">Functions Mapped: <strong>${data.statistics.functions}</strong></div>
+                    <div class="meta-stat-item">Classes Mapped: <strong>${data.statistics.classes || 0}</strong></div>
+                    <div class="meta-stat-item">Functions Mapped: <strong>${data.statistics.functions || 0}</strong></div>
                 `;
 
                 // Render File Explorer tree selection list
@@ -360,7 +376,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         repoFileList.appendChild(fileItem);
                     });
                 } else {
-                    repoFileList.innerHTML = `<div class="empty-explorer">No Python source files scanned in the repository folder.</div>`;
+                    repoFileList.innerHTML = `<div class="empty-explorer">No source files mapped in the repository folder.</div>`;
                 }
             } else {
                 repoFileList.innerHTML = `<div class="empty-explorer" style="color:var(--status-failed);">Failed to map the repository index.</div>`;
@@ -377,10 +393,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const codeChange = analyzerChangeInput.value.trim();
         if (!selectedFilePath) {
             alert("Please select a target file from the explorer structure first!");
-            return;
-        }
-        if (!codeChange) {
-            alert("Please paste the proposed modifications/updates first!");
             return;
         }
 

@@ -6,8 +6,11 @@ import shutil
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
+from dotenv import load_dotenv
 from groq import Groq
 from repo_analyzer.graph_rag import CodeGraph
+
+load_dotenv()
 
 router = APIRouter(prefix="/api")
 
@@ -20,7 +23,7 @@ class AnalyzeRepoRequest(BaseModel):
 
 class CheckImpactRequest(BaseModel):
     file_path: str   # Relative file path inside the repo, e.g. "agent/tools.py"
-    code_change: str # Code snippet representing changes/modifications
+    code_change: Optional[str] = "" # Optional code snippet representing changes/modifications
 
 def download_and_extract_repo(repo_url: str, extract_to: str) -> str:
     """Downloads a GitHub repository as a ZIP archive and extracts it."""
@@ -93,6 +96,7 @@ async def analyze_repo(payload: AnalyzeRepoRequest):
             if props["type"] == "file"
         ])
         files_count = len(files_list)
+        classes_count = len([n for n, p in _current_repo_graph.nodes.items() if p["type"] == "class"])
         funcs_count = len([n for n, p in _current_repo_graph.nodes.items() if p["type"] in ["function", "method"]])
 
         _current_repo_name = payload.repo_url.split("/")[-1]
@@ -104,6 +108,7 @@ async def analyze_repo(payload: AnalyzeRepoRequest):
                 "files": files_count,
                 "nodes": nodes_count,
                 "edges": edges_count,
+                "classes": classes_count,
                 "functions": funcs_count
             },
             "files_list": files_list
@@ -135,6 +140,36 @@ async def check_impact(payload: CheckImpactRequest):
     impact = _current_repo_graph.query_impact(payload.file_path)
     impact_chain = impact.get("impact_chain", [])
 
+    # Fetch target file source code from graph nodes
+    file_node_id = f"file:{payload.file_path}"
+    target_code = ""
+    if file_node_id in _current_repo_graph.nodes:
+        target_code = _current_repo_graph.nodes[file_node_id].get("code", "")
+    else:
+        for n_id, props in _current_repo_graph.nodes.items():
+            if props["type"] == "file" and (payload.file_path in props["file"] or props["file"] in payload.file_path):
+                target_code = props.get("code", "")
+                break
+
+    if len(target_code) > 8000:
+        target_code = target_code[:8000] + "\n... (truncated for length)"
+
+    # Determine file language highlighting tag
+    ext = os.path.splitext(payload.file_path)[1].lower()
+    lang = "python"
+    if ext in [".js", ".jsx"]:
+        lang = "javascript"
+    elif ext in [".ts", ".tsx"]:
+        lang = "typescript"
+    elif ext in [".java"]:
+        lang = "java"
+    elif ext in [".cpp", ".h", ".hpp", ".cc", ".cxx"]:
+        lang = "cpp"
+    elif ext in [".go"]:
+        lang = "go"
+    elif ext in [".rb"]:
+        lang = "ruby"
+
     # Format downstream context
     downstream_details = []
     for item in impact_chain:
@@ -147,7 +182,7 @@ async def check_impact(payload: CheckImpactRequest):
         
         downstream_details.append(
             f"- Entity: {item['type']} '{item['name']}' in file '{item['file']}' (Depth: {item['depth']})\n"
-            f"  Code Reference:\n```python\n{code_context}\n```"
+            f"  Code Reference:\n```{lang}\n{code_context}\n```"
         )
 
     downstream_formatted = "\n\n".join(downstream_details) if downstream_details else "No direct downstream callers found."
@@ -155,25 +190,49 @@ async def check_impact(payload: CheckImpactRequest):
     # Ask LLM to run impact analysis
     client = Groq(api_key=os.getenv("GROQ_API_KEY"))
     system_prompt = (
-        "You are an expert software architect and dependency impact analyzer. "
-        "Review proposed modifications to a file and explain what could break downstream "
-        "based on the call graph relationships provided."
+        "You are an expert software architect. Analyze the provided codebase files and dependencies, "
+        "and produce a professional, clean code analysis report. "
+        "Do NOT mention internal terms like 'Graph RAG', 'retrieved context', 'vector store', or 'LLM' in your output. "
+        "Refer directly to the project code, modules, classes, and call relationships in a direct, natural tone."
     )
     
-    user_prompt = f"""Target File to modify: {payload.file_path}
+    if payload.code_change and payload.code_change.strip():
+        user_prompt = f"""Target File: {payload.file_path}
 
+Source Code of Target File:
+```{lang}
+{target_code}
+```
+ 
 Proposed Code Change:
-```python
+```{lang}
 {payload.code_change}
 ```
-
-Below is the Graph RAG retrieved downstream context (modules, functions, and methods that depend on/call elements in {payload.file_path}):
+ 
+Downstream call dependencies (modules/functions that depend on this file):
 {downstream_formatted}
-
+ 
 Please analyze this setup and provide a report on:
 1) Potential breakages (signature mismatches, type conflicts, logic updates needed).
 2) Safe migration strategy (steps to safely introduce the change without crashing callers).
 3) General review comments.
+"""
+    else:
+        user_prompt = f"""Target File: {payload.file_path}
+
+Source Code of Target File:
+```{lang}
+{target_code}
+```
+ 
+Downstream call dependencies (modules/functions that depend on this file):
+{downstream_formatted}
+ 
+Please analyze this setup and provide an architectural impact report on:
+1) Structural role: Analyze the classes, functions, and main operations defined in this file. Detail what it does and how it acts as a building block for the codebase.
+2) Downstream dependency analysis: Explain how modifying this file might affect the callers listed in the dependency section (if any).
+3) General impact risk rating (Low/Medium/High) if structural or signature shifts are introduced, and safety precautions.
+4) Refactoring recommendations: Best practices, safety tips, or modularization patterns when updating this file.
 """
 
     try:
