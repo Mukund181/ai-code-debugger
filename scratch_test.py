@@ -8,9 +8,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from agent.core import build_agent, build_gen_agent
 
 def test_debug_agent():
-    print("\n==========================================")
     print("TESTING DEBUGER AGENT WORKFLOW")
-    print("==========================================")
     agent = build_agent()
     
     # Buggy code representing a division by zero logic error
@@ -45,9 +43,7 @@ print(divide_items([10, 20, 30], 0))
 
 
 def test_generation_agent():
-    print("\n==========================================")
     print("TESTING GENERATION & LEARNING AGENT WORKFLOW")
-    print("==========================================")
     agent = build_gen_agent()
     
     prompt = "Write a Python class representing a Stack data structure with push and pop methods, and a sample run."
