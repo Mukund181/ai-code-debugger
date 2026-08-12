@@ -32,11 +32,11 @@ graph TD
     end
     
     %% Intelligent LLM Gateway
-    AR -->|LLM Requests| GW[Smart LLM Routing Gateway]
+    AR -->|LLM Requests| GW[AWS Bedrock Unified API Gateway]
     
-    subgraph LLM Routing Gateway & Failover
-        GW -->|Step 1: Check Quota & Ping| P1[Premium LLMs: Claude 3.5 / GPT-4o]
-        P1 -->|Failure / Quota Exhaustion| P2[Graceful Fallback: Llama 3 via AWS Bedrock]
+    subgraph AWS Bedrock Unified API Gateway
+        GW -->|Step 1: Check Quota & Limit| P1[Premium Model: Claude 3.5 Sonnet]
+        P1 -->|Fallback / Quota Exhaustion| P2[Standard Model: Meta Llama 3]
     end
 
     %% Deployment
@@ -85,24 +85,20 @@ To support teams, access permissions are structured around clear operational bou
 | View System Billing & API Logs | Yes | No |
 
 ### 5. 🔄 Graceful LLM Delegation & Quota Failover (New Plan)
-To optimize operating costs and maintain high availability, the platform runs an intelligent model router:
-1.  **Primary Routing:** The platform routes code generation and reasoning tasks to premium, high-reasoning endpoints:
-    *   **Anthropic Claude 3.5 Sonnet** (default for code syntax generation).
-    *   **OpenAI GPT-4o** (default for Graph-RAG architectural mapping reports).
-2.  **Credit Check & Rate Limiting:** A database middleware intercepts calls to check:
-    *   Has the workspace's assigned monthly credit dollar quota run out?
-    *   Is the current API endpoint experiencing a `429 (Too Many Requests)` rate limit or `503` service timeout?
-3.  **Graceful Delegation / Fallback:** If premium credentials fail or limits are hit, the router seamlessly downgrades the prompt payload:
-    *   Constructs a highly structured fallback prompt.
-    *   Directs queries to **Meta Llama 3 (70B/8B)** powered by **AWS Bedrock**.
-    *   Displays an unobtrusive UI notification: *"Switched to backup agent (Llama 3 via AWS Bedrock) due to quota limits."*
+To optimize operating costs and maintain high availability, the platform leverages **AWS Bedrock** as a unified API gateway hosting all LLM models:
+1.  **Unified API Integration via AWS Bedrock:** All LLM queries are routed through AWS Bedrock as the unified API layer. This provides a single, standardized client surface to manage and switch between Anthropic Claude 3.5 Sonnet (Premium) and Meta Llama 3 (Standard).
+2.  **Credit Check & Degradation Policy Middleware:** A database middleware intercepts calls to check:
+    *   Has the workspace's assigned monthly credit/token quota run out?
+    *   Is the primary model (Claude 3.5 Sonnet) encountering rate limits or provider downtime?
+3.  **Graceful Model Failover:** If premium quotas are exceeded or limits are hit, the gateway automatically falls back to Meta Llama 3 within the same Bedrock client instance.
+4.  **UI Notification:** Displays a real-time WebSocket warning back to users: *"Switched to standard model (Llama 3) via AWS Bedrock due to quota/rate limits."*
 
 ### 6. 🐳 Containerization & Hugging Face Spaces Deployment (New Plan)
 *   **Multi-Stage Dockerfile:** An optimized Docker setup compiles C/C++ dependencies (if needed for AST tools), runs Python package installs, builds frontend assets, and exposes the app.
 *   **Hugging Face Spaces Native Integration:**
     *   The container binds to port `7860` (as required by Hugging Face Spaces).
     *   Stores SQLite or ChromaDB indexes inside `/data` mapped as an HF Persistent Storage Volume to keep repository indices persistent across container restarts.
-    *   Exposes secure credentials via Hugging Face Repository Secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `GROQ_API_KEY`, etc.).
+    *   Exposes secure credentials via Hugging Face Repository Secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, etc.).
 
 ---
 
@@ -125,7 +121,7 @@ To optimize operating costs and maintain high availability, the platform runs an
 │   ├── config.py           # Postgres / SQLite connectivity
 │   └── session.py          # Session factories
 ├── gateway/                # [NEW] LLM Gateway & Failover
-│   ├── router.py           # Intelligent LLM Router (Claude/GPT-4o to Bedrock Llama)
+│   ├── router.py           # Intelligent Bedrock LLM Router (Claude to Llama 3)
 │   └── quota.py            # Credits check and usage tracker
 ├── rag/
 │   ├── loader.py           # Doc parser and ChromaDB indexing
@@ -158,11 +154,7 @@ Set your API keys and credentials in a `.env` file in the project root:
 GROQ_API_KEY=gsk_...
 DATABASE_URL=postgresql://user:pass@host:5432/dbname
 
-# Premium Providers
-OPENAI_API_KEY=sk-proj-...
-ANTHROPIC_API_KEY=sk-ant-...
-
-# AWS Bedrock Credentials (Fallback)
+# AWS Bedrock Credentials (Unified API Gateway hosting Claude and Llama)
 AWS_ACCESS_KEY_ID=AKIA...
 AWS_SECRET_ACCESS_KEY=...
 AWS_REGION=us-east-1
@@ -221,7 +213,7 @@ docker run -p 8000:8000 --env-file .env ai-code-platform
 3.  **Adjust Dockerfile to HF Spaces:**
     *   Expose port `7860` instead of `8000` in your Dockerfile.
     *   Add a user named `user` with uid `1000` to prevent write access permission blocks inside Hugging Face containers.
-4.  **Inject Repository Secrets:** Set `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION` in the HF Spaces secret console.
+4.  **Inject Repository Secrets:** Set `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION` in the HF Spaces secret console.
 5.  **Push Code:** Push this repository to your Hugging Face Space git remote. It will automatically build the container and deploy the server.
 
 ---
@@ -237,6 +229,6 @@ docker run -p 8000:8000 --env-file .env ai-code-platform
 *   [ ] **Phase 3: Multi-Actor Orchestrator**
     *   Integration of LangGraph state router, Safety and Command Sandbox Auditor, and Graph RAG Architect agent.
 *   [ ] **Phase 4: Multi-Model Gateway**
-    *   Gateway layer to query Claude/GPT-4o, handle token limits, and delegate automatically to Llama 3 via AWS Bedrock.
+    *   AWS Bedrock unified API gateway to manage Claude and Llama 3 queries, verify credit token limits, and handle graceful degradation.
 *   [ ] **Phase 5: Cloud Deployment**
     *   Multi-stage Docker builds, persistent volume configurations, and automated deploy configurations to Hugging Face Spaces.
